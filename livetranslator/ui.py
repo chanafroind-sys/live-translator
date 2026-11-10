@@ -137,7 +137,11 @@ class SubtitleWindow:
             "visible": self.visible,
             "fast_voice": self.s.tts_engine == "piper",
             "narrate": bool(self.narrator and self.narrator.on.is_set()),
+            "polish": self.polish_on,
         }
+
+    polish_on = False
+    on_toggle_polish = None
 
     def hide(self) -> None:
         if not self.visible:
@@ -209,6 +213,14 @@ class SubtitleWindow:
                     self._refresh_tray()
                     if self.tray:
                         self.tray.notify("הקראה בעברית: " + ("פועלת" if on else "כבויה"))
+                elif kind == "polish_toggle" and self.on_toggle_polish:
+                    on = self.on_toggle_polish()
+                    msg = ("ניסוח משופר זמין רק עם Claude" if on is None
+                           else "ניסוח משופר: " + ("פועל" if on else "כבוי (תרגום רגיל)"))
+                    self.polish_on = bool(on)
+                    self._refresh_tray()
+                    if self.tray:
+                        self.tray.notify(msg)
                 elif kind == "notify":
                     if self.tray:
                         self.tray.notify(args[0])

@@ -183,11 +183,21 @@ class Pipeline:
             english = self.recognizer.transcribe(audio)
             if not english:
                 continue
-            hebrew = self.translator.translate(english)
+            narrating = bool(self.narrator and self.narrator.on.is_set())
+            stream = getattr(self.translator, "translate_stream", None)
+            if narrating and stream:
+                # Start speaking Hebrew at the first clause, subtitle at the end.
+                parts = []
+                for clause in stream(english):
+                    parts.append(clause)
+                    self.narrator.say(clause)
+                hebrew = " ".join(parts).strip()
+            else:
+                hebrew = self.translator.translate(english)
+                if narrating:
+                    self.narrator.say(hebrew)
             if hebrew:  # "" = filler ("uh", "um"): no subtitle
                 self.on_line(english, hebrew, time.time() - ended_at)
-                if self.narrator:
-                    self.narrator.say(hebrew)
 
 
 def _set_default_mic(name: str) -> bool:
@@ -268,6 +278,8 @@ def run_live() -> None:
     )
     holder["sp"] = sp
     ui.on_toggle_voice = sp.toggle_voice
+    ui.on_toggle_polish = sp.toggle_polish
+    ui.polish_on = s.polish_on_at_start
     p = Pipeline(
         s,
         on_line=lambda en, he, lag: (print(f"[+{lag:.1f}s] {en} -> {he}", flush=True), ui.post("line", en, he)),
@@ -293,6 +305,7 @@ def run_live() -> None:
             s.speak_hotkey: lambda: ui.post("speak_toggle"),
             s.window_hotkey: lambda: ui.post("window_toggle"),
             s.narrate_hotkey: lambda: ui.post("narrate_toggle"),
+            s.polish_hotkey: lambda: ui.post("polish_toggle"),
         })
     except Exception as e:
         print(f"[hotkey] unavailable: {e}", flush=True)  # tray menu still works

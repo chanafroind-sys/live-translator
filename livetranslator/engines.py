@@ -129,7 +129,13 @@ class NllbTranslator:
         if not text:
             return ""
         tokens = [self.src] + self.tok.encode(text, add_special_tokens=False).tokens + ["</s>"]
-        r = self.model.translate_batch([tokens], target_prefix=[[self.tgt]], beam_size=2, max_decoding_length=256)
+        # Bounded length + no repeated 3-grams: hesitant speech ("על, על")
+        # once sent NLLB into a 25 s "this, this, this..." loop.
+        r = self.model.translate_batch(
+            [tokens], target_prefix=[[self.tgt]], beam_size=2,
+            max_decoding_length=min(256, 2 * len(tokens) + 10),
+            no_repeat_ngram_size=3, repetition_penalty=1.2,
+        )
         ids = [self.tok.token_to_id(t) for t in r[0].hypotheses[0] if t != self.tgt]
         return self.tok.decode([i for i in ids if i is not None]).strip()
 

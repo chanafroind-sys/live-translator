@@ -33,6 +33,7 @@ class Tray:
         menu = Menu(
             Item("הצג / הסתר כתוביות", lambda: post("window_toggle"), default=True),
             Item("תרגום הדיבור שלי לאנגלית", lambda: post("speak_toggle"), checked=st("speak")),
+            Item("ניסוח משופר של מה שאני אומרת", lambda: post("polish_toggle"), checked=st("polish")),
             Item("הקראה בעברית של מה שהם אומרים", lambda: post("narrate_toggle"), checked=st("narrate")),
             Item("קול מהיר (פחות טבעי)", lambda: post("voice_toggle"), checked=st("fast_voice")),
             Item("מילון מונחים ושמות…", self._open_vocabulary),

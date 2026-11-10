@@ -44,6 +44,7 @@ class GroqRecognizer:
         self.context = ""
         self.failures = 0
         self.retry_at = 0.0  # after repeated failures, when to try the cloud again
+        self.session = None
 
     def _local(self, audio: np.ndarray) -> str:
         if self._fallback is None:  # loaded only if the cloud ever fails
@@ -79,13 +80,20 @@ class GroqRecognizer:
         from . import net
 
         try:
-            data = json.loads(net.post(URL, body.getvalue(), {
-                "Authorization": f"Bearer {self.key}",
-                "Content-Type": f"multipart/form-data; boundary={boundary}",
-            }, self.timeout).decode("utf-8"))
+            if self.session is None:
+                self.session = net.Session("api.groq.com", self.timeout)  # kept alive between phrases
+            with self.session.lock:
+                r = self.session.request("/openai/v1/audio/transcriptions", body.getvalue(), {
+                    "Authorization": f"Bearer {self.key}",
+                    "Content-Type": f"multipart/form-data; boundary={boundary}",
+                })
+                data = json.loads(r.read().decode("utf-8"))
             kept = []
             for seg in data.get("segments") or []:
-                if seg.get("no_speech_prob", 0) > 0.5 or seg.get("avg_logprob", 0) < -1.0:
+                # Whisper's stock phrases on noise need only a hint of doubt.
+                stock = seg.get("text", "").strip(" .!") in ("תודה", "תודה רבה", "Thank you", "Thanks for watching")
+                limit = 0.1 if stock else 0.5
+                if seg.get("no_speech_prob", 0) > limit or seg.get("avg_logprob", 0) < -1.0:
                     print(f"[asr] dropped as non-speech: {seg.get('text', '').strip()!r} "
                           f"(no_speech {seg.get('no_speech_prob', 0):.2f}, logprob {seg.get('avg_logprob', 0):.2f})", flush=True)
                     continue
@@ -96,7 +104,7 @@ class GroqRecognizer:
             self.failures, self.retry_at = 3, time.time() + 300  # try the cloud again in 5 min
             return self._local(audio)
         except urllib.error.HTTPError as e:
-            print(f"[asr] Groq HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:200]}", flush=True)
+            print(f"[asr] Groq HTTP {e.code}: {e.msg}", flush=True)
             self.failures += 1 if e.code in (400, 401, 403, 404) else 0
             return self._local(audio)
         except Exception as e:  # offline, timeout

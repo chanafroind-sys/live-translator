@@ -48,7 +48,7 @@ class Settings:
     translation_model_dir: str = str(MODELS_DIR / "en_he" / "translate-en_he-1_5")
 
     # Segmenting speech: a phrase ends after this much silence...
-    silence_end_sec: float = 0.5
+    silence_end_sec: float = 0.4
     # ...or is cut at this length so subtitles never lag too far behind.
     max_phrase_sec: float = 6.0
     # Loudness (RMS, 0..1) above which audio counts as speech.
@@ -105,6 +105,10 @@ class Settings:
     # app gets it automatically; put your previous mic back on exit.
     auto_default_mic: bool = True
     speak_hotkey: str = "ctrl+alt+y"
+    # "Polish" mode for your speech: same meaning, cleaner English (no
+    # false starts, fillers, repetitions). Needs Claude. Ctrl+Alt+P.
+    polish_hotkey: str = "ctrl+alt+p"
+    polish_on_at_start: bool = False
 
 
 def load_settings() -> Settings:

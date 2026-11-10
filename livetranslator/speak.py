@@ -94,6 +94,15 @@ class SpeakPipeline:
             self.enabled.set()
         return self.enabled.is_set()
 
+    def toggle_polish(self) -> bool | None:
+        """Switch 'polish my English' on/off. None = needs Claude (not available)."""
+        tr = getattr(self, "translator", None)
+        if tr is None or not hasattr(tr, "polish"):
+            return None
+        tr.polish = not tr.polish
+        print(f"[speak] polish {'ON' if tr.polish else 'OFF'}", flush=True)
+        return tr.polish
+
     def toggle_voice(self) -> str:
         """Switch the English voice: natural (Kokoro) <-> fast (Piper)."""
         from .config import save_setting
@@ -178,6 +187,8 @@ class SpeakPipeline:
 
             self.recognizer = make_recognizer(self.s, self.s.speak_whisper_model, "he")
             self.translator = make_translator(self.s, "he", "en", self.s.he_en_model_dir)
+            if hasattr(self.translator, "polish"):
+                self.translator.polish = self.s.polish_on_at_start
             self.voice = make_voice(self.s, self.models_dir)
             self.voices = {self.s.tts_engine: self.voice}
         except Exception as e:
@@ -224,7 +235,8 @@ class SpeakPipeline:
                 if not self.enabled.is_set() or not en:
                     continue
                 try:
-                    self._queue_voice(he, en, got_at)
+                    started = self._queue_voice(en)
+                    self.on_line(he, en, (started or time.time()) - got_at)
                 except Exception as e:
                     self.on_error(str(e))
 
@@ -232,17 +244,17 @@ class SpeakPipeline:
         threading.Thread(target=speak, daemon=True, name="speak-cloud-voice").start()
         self.ready = True
 
-    def _queue_voice(self, hebrew: str, english: str, since: float) -> None:
-        first = True
+    def _queue_voice(self, english: str) -> float | None:
+        """Synthesize and queue for the mixer; returns when audio first queued."""
+        first = None
         for pcm in self.voice.speak(english):
             if not self.enabled.is_set():
                 break
             pcm = _resample(pcm, self.voice.sample_rate, OUT_RATE)
             with self.tts_lock:
                 self.tts = np.concatenate([self.tts, pcm])
-            if first:
-                self.on_line(hebrew, english, time.time() - since)
-                first = False
+            first = first or time.time()
+        return first
 
     def _segment_loop(self) -> None:
         seg = PhraseSegmenter(self.s.mic_speech_threshold, self.s.silence_end_sec, self.s.max_phrase_sec, adaptive=True)
@@ -294,7 +306,18 @@ class SpeakPipeline:
             if not self.enabled.is_set():
                 continue
             t0 = time.time()
-            english = self.translator.translate(hebrew)
-            print(f"[speak] translated in {time.time() - t0:.1f}s: {english!r}", flush=True)
-            if english:
-                self._queue_voice(hebrew, english, ended_at)
+            stream = getattr(self.translator, "translate_stream", None)
+            clauses = stream(hebrew) if stream else [self.translator.translate(hebrew)]
+            parts, first_audio = [], None
+            for clause in clauses:  # voice each clause as soon as Claude writes it
+                if not clause or not self.enabled.is_set():
+                    continue
+                if not parts:
+                    print(f"[speak] first words after {time.time() - t0:.2f}s", flush=True)
+                parts.append(clause)
+                started = self._queue_voice(clause)
+                first_audio = first_audio or started
+            if parts:
+                english = " ".join(parts)
+                print(f"[speak] translated in {time.time() - t0:.1f}s: {english!r}", flush=True)
+                self.on_line(hebrew, english, (first_audio or time.time()) - ended_at)
