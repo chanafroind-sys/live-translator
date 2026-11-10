@@ -181,7 +181,10 @@ def _route_default_mic(s):
 
         current = sc.default_microphone().name
         if "cable" in current.lower():
-            return None  # already routed (e.g. after a crash): leave it
+            # Already routed (the app was killed last time): restore to the
+            # real mic on exit this time.
+            real = next((m.name for m in sc.all_microphones() if "cable" not in m.name.lower()), None)
+            return real
         if not any("cable output" in m.name.lower() for m in sc.all_microphones()):
             return None  # VB-CABLE not installed
         if _set_default_mic("CABLE Output"):
