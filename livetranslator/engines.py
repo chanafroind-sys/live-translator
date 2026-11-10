@@ -202,13 +202,33 @@ class KokoroVoice:
         self.sample_rate = 24000
 
     def speak(self, text: str):
-        """Yield audio sentence by sentence, so playback starts early."""
-        for sentence in self.phonemizer.phonemize(self.lang, text):
-            ipa = "".join(sentence).strip()
-            if not ipa:
-                continue
-            pcm, self.sample_rate = self.kokoro.create(ipa, voice=self.voice_name, speed=self.speed, is_phonemes=True)
-            yield np.asarray(pcm, dtype=np.float32)
+        """Yield audio clause by clause, so playback starts early.
+
+        Kokoro needs ~1 s per second of speech on this CPU, so the first
+        audio waits for the whole first chunk; splitting at commas lets the
+        voice start after the first clause instead of the whole sentence.
+        """
+        for chunk in _clauses(text):
+            for sentence in self.phonemizer.phonemize(self.lang, chunk):
+                ipa = "".join(sentence).strip()
+                if not ipa:
+                    continue
+                pcm, self.sample_rate = self.kokoro.create(ipa, voice=self.voice_name, speed=self.speed, is_phonemes=True)
+                yield np.asarray(pcm, dtype=np.float32)
+
+
+def _clauses(text: str, min_words: int = 4) -> list[str]:
+    """Split at , ; : and sentence ends, merging pieces shorter than min_words."""
+    import re
+
+    parts = [p.strip() for p in re.split(r"(?<=[,;:.!?])\s+", text) if p.strip()]
+    out: list[str] = []
+    for p in parts:
+        if out and len(out[-1].split()) < min_words:
+            out[-1] = f"{out[-1]} {p}"
+        else:
+            out.append(p)
+    return out
 
 
 class Voice:

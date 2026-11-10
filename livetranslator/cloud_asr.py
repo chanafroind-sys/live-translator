@@ -109,6 +109,10 @@ class GroqRecognizer:
 
         if text.lower() in _HALLUCINATIONS:
             return ""
+        # Whisper large "hears" a lone thank-you in short bursts of noise.
+        if len(audio) < 1.2 * 16000 and text.strip(" .!") in ("תודה", "תודה רבה", "Thank you"):
+            print(f"[asr] dropped likely noise: {text!r}", flush=True)
+            return ""
         if text:
             self.context = text
         return text

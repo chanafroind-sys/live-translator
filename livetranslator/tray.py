@@ -33,6 +33,7 @@ class Tray:
         menu = Menu(
             Item("הצג / הסתר כתוביות", lambda: post("window_toggle"), default=True),
             Item("תרגום הדיבור שלי לאנגלית", lambda: post("speak_toggle"), checked=st("speak")),
+            Item("קול מהיר (פחות טבעי)", lambda: post("voice_toggle"), checked=st("fast_voice")),
             Menu.SEPARATOR,
             Item("יציאה", lambda: post("quit")),
         )

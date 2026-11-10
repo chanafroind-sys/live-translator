@@ -226,6 +226,7 @@ def run_live() -> None:
         on_error=lambda t: (print(f"[speak] {t}", flush=True), ui.post("speak_error", t)),
     )
     holder["sp"] = sp
+    ui.on_toggle_voice = sp.toggle_voice
     p = Pipeline(
         s,
         on_line=lambda en, he, lag: (print(f"[+{lag:.1f}s] {en} -> {he}", flush=True), ui.post("line", en, he)),

@@ -91,6 +91,22 @@ class SpeakPipeline:
             self.enabled.set()
         return self.enabled.is_set()
 
+    def toggle_voice(self) -> str:
+        """Switch the English voice: natural (Kokoro) <-> fast (Piper)."""
+        from .config import save_setting
+        from .engines import make_voice
+
+        new = "piper" if self.s.tts_engine == "kokoro" else "kokoro"
+        self.s.tts_engine = new
+        voices = getattr(self, "voices", {})
+        if new not in voices:
+            voices[new] = make_voice(self.s, self.models_dir)
+            self.voices = voices
+        self.voice = voices[new]
+        save_setting("tts_engine", new)
+        print(f"[speak] voice -> {new}", flush=True)
+        return new
+
     def start(self) -> None:
         threading.Thread(target=self._audio_loop, daemon=True, name="speak-audio").start()
         threading.Thread(target=self._boot_models, daemon=True, name="speak-boot").start()
@@ -160,6 +176,7 @@ class SpeakPipeline:
             self.recognizer = make_recognizer(self.s, self.s.speak_whisper_model, "he")
             self.translator = make_translator(self.s, "he", "en", self.s.he_en_model_dir)
             self.voice = make_voice(self.s, self.models_dir)
+            self.voices = {self.s.tts_engine: self.voice}
         except Exception as e:
             self.on_error(f"שגיאה בטעינת מודלי דיבור: {e}")
             return

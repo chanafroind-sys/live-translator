@@ -32,7 +32,8 @@ class Settings:
     claude_translation: bool = True
     # Offline translator: "nllb" (much better, 620 MB) or "argos" (130 MB).
     local_translator: str = "nllb"
-    claude_model: str = "claude-opus-5-5"
+    # Haiku: chosen by the user for speed on short live phrases.
+    claude_model: str = "claude-haiku-5-5"
     # Names/terms to always translate the same way, e.g. "Deel = Deel; מוצר = product".
     glossary: str = ""
 
@@ -69,7 +70,10 @@ class Settings:
     speak_whisper_model: str = "small"
     he_en_model_dir: str = str(MODELS_DIR / "he_en" / "translate-he_en-1_5")
     # English voice. "kokoro" sounds most natural; "piper" is lighter/faster.
-    tts_engine: str = "kokoro"
+    # Measured end to end through the cable with Groq + Haiku:
+    # piper ~1.5 s after you stop talking, kokoro ~5 s (more natural).
+    # Switch any time from the tray menu ("קול מהיר").
+    tts_engine: str = "piper"
     # Kokoro female voices: af_heart (default), af_bella, af_sarah, af_nicole,
     # bf_emma (British). Samples: samples/voice_kokoro_*.wav
     kokoro_voice: str = "af_heart"

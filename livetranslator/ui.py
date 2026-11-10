@@ -27,6 +27,7 @@ class SubtitleWindow:
         self.s = settings
         self.on_toggle = on_toggle
         self.on_toggle_speak = on_toggle_speak
+        self.on_toggle_voice = None  # set by app.py
         self.speak_enabled = bool(settings.speak_on_at_start)
         self.speak_ready = False
         self.speak_virtual = True
@@ -129,7 +130,7 @@ class SubtitleWindow:
     _resume_on_show = False
 
     def state(self) -> dict:
-        return {"speak": self.speak_enabled, "visible": self.visible}
+        return {"speak": self.speak_enabled, "visible": self.visible, "fast_voice": self.s.tts_engine == "piper"}
 
     def hide(self) -> None:
         if not self.visible:
@@ -185,6 +186,16 @@ class SubtitleWindow:
                     self._toggle_speak()
                     if self.tray and not self.visible:  # no window: say it with a popup
                         self.tray.notify("תרגום הדיבור שלך לאנגלית: " + ("פועל" if self.speak_enabled else "כבוי"))
+                elif kind == "voice_toggle" and self.on_toggle_voice:
+                    import threading
+
+                    def switch():  # loading a voice takes a moment: keep the UI responsive
+                        new = self.on_toggle_voice()
+                        if self.tray:
+                            self.tray.refresh()
+                            self.tray.notify("קול: " + ("מהיר" if new == "piper" else "טבעי"))
+
+                    threading.Thread(target=switch, daemon=True).start()
                 elif kind == "window_toggle":
                     self.toggle_visible()
                 elif kind == "quit":
