@@ -75,7 +75,8 @@ class Settings:
 def load_settings() -> Settings:
     s = Settings()
     if CONFIG_FILE.exists():
-        data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        # utf-8-sig: Notepad/PowerShell often save JSON with a BOM.
+        data = json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig"))
         names = {f.name for f in fields(Settings)}
         for k, v in data.items():
             if k in names:
@@ -89,6 +90,6 @@ def write_example_config(path: Path) -> None:
 
 def save_setting(name: str, value) -> None:
     """Change one value in config.json, keeping everything else."""
-    data = json.loads(CONFIG_FILE.read_text(encoding="utf-8")) if CONFIG_FILE.exists() else {}
+    data = json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig")) if CONFIG_FILE.exists() else {}
     data[name] = value
     CONFIG_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
