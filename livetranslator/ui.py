@@ -58,7 +58,7 @@ class SubtitleWindow:
         top.pack(fill="x", padx=14, pady=(8, 0))
         close = tk.Label(top, text="✕", bg=BG, fg=MUTED, font=("Segoe UI", 11), cursor="hand2")
         close.pack(side="left")
-        close.bind("<Button-1>", lambda e: self.quit())
+        close.bind("<Button-1>", lambda e: self.hide())  # hides; the app keeps running
         # Tk has no bidi support, so Hebrew and Latin text go in separate
         # labels laid out right-to-left instead of one mixed string.
         self.status = tk.Label(top, text="", bg=BG, fg=MUTED, font=("Segoe UI", 10))
@@ -123,6 +123,42 @@ class SubtitleWindow:
         self.on_quit()
         self.root.destroy()
 
+    # ---- visibility: hidden window = subtitles paused -------------------
+    visible = True
+    tray = None
+    _resume_on_show = False
+
+    def state(self) -> dict:
+        return {"speak": self.speak_enabled, "visible": self.visible}
+
+    def hide(self) -> None:
+        if not self.visible:
+            return
+        self.visible = False
+        self._resume_on_show = self.enabled
+        if self.enabled:
+            self._toggle()  # stop transcribing while nobody is looking
+        self.root.withdraw()
+        self._refresh_tray()
+
+    def show(self) -> None:
+        if self.visible:
+            return
+        self.visible = True
+        self.root.deiconify()
+        self.root.attributes("-topmost", True)
+        if self._resume_on_show and not self.enabled:
+            self._toggle()
+        self._render()
+        self._refresh_tray()
+
+    def toggle_visible(self) -> None:
+        self.hide() if self.visible else self.show()
+
+    def _refresh_tray(self) -> None:
+        if self.tray:
+            self.tray.refresh()
+
     # ---- internals ------------------------------------------------------
     def _poll(self) -> None:
         try:
@@ -147,6 +183,13 @@ class SubtitleWindow:
                     self._toggle()
                 elif kind == "speak_toggle":
                     self._toggle_speak()
+                    if self.tray and not self.visible:  # no window: say it with a popup
+                        self.tray.notify("תרגום הדיבור שלך לאנגלית: " + ("פועל" if self.speak_enabled else "כבוי"))
+                elif kind == "window_toggle":
+                    self.toggle_visible()
+                elif kind == "quit":
+                    self.quit()
+                    return
                 elif kind == "speak_ready":
                     self.speak_ready = True
                     self._show_speak()
@@ -210,6 +253,7 @@ class SubtitleWindow:
             self.speak_enabled = self.on_toggle_speak()
             print(f"[speak] translation {'ON' if self.speak_enabled else 'OFF'}", flush=True)
             self._show_speak()
+            self._refresh_tray()
 
     def _show_speak(self) -> None:
         hk = self.s.speak_hotkey.replace("+", " + ").title()
@@ -250,7 +294,8 @@ class SubtitleWindow:
         m.add_command(label="הקטן טקסט", command=lambda: self._font(-2))
         m.add_command(label="נקה", command=self._clear)
         m.add_separator()
-        m.add_command(label="יציאה", command=self.quit)
+        m.add_command(label="הסתר חלון (התוכנה ממשיכה לפעול)", command=self.hide)
+        m.add_command(label="יציאה מהתוכנה", command=self.quit)
         m.tk_popup(e.x_root, e.y_root)
 
     def _switch_engine(self) -> None:

@@ -45,6 +45,10 @@ class Settings:
 
     # Global on/off hotkey (needs the `keyboard` package).
     hotkey: str = "ctrl+alt+t"
+    # Show / hide the subtitles window. While hidden, subtitles are paused
+    # (nothing is transcribed) and the app lives as an icon by the clock.
+    window_hotkey: str = "ctrl+alt+s"
+    start_hidden: bool = True
 
     # ---- Speaking direction: your Hebrew -> English voice --------------
     # Hebrew needs the "small" model; "base" garbles Hebrew.

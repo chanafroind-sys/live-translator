@@ -184,6 +184,8 @@ def run_live() -> None:
     def quit_all():
         holder["p"].stop()
         holder["sp"].stop()
+        if holder.get("tray"):
+            holder["tray"].stop()
         if restore_mic:
             _set_default_mic(restore_mic.split(" (")[0])
 
@@ -217,8 +219,23 @@ def run_live() -> None:
 
         keyboard.add_hotkey(s.hotkey, lambda: ui.post("toggle"))
         keyboard.add_hotkey(s.speak_hotkey, lambda: ui.post("speak_toggle"))
+        keyboard.add_hotkey(s.window_hotkey, lambda: ui.post("window_toggle"))
     except Exception:
         pass  # hotkeys are optional; right-click menu still works
+
+    try:
+        from .tray import Tray
+
+        ui.tray = holder["tray"] = Tray(ui.post, ui.state)
+    except Exception as e:
+        print(f"[tray] unavailable: {e}", flush=True)
+    if s.start_hidden and ui.tray:  # live by the clock until subtitles are wanted
+        p.enabled.clear()
+        ui.enabled = False
+        ui._resume_on_show = True
+        ui.visible = False
+        ui.root.withdraw()
+        ui.tray.refresh()
     p.start()
     sp.start()
 
