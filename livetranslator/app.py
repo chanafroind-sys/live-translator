@@ -138,6 +138,40 @@ class Pipeline:
             self.on_line(english, hebrew, time.time() - ended_at)
 
 
+def _set_default_mic(name: str) -> bool:
+    """Make the Windows default recording device the one matching `name`."""
+    import subprocess
+
+    from .config import ROOT
+
+    script = ROOT / "tools" / "set_default_audio.ps1"
+    r = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script), "-Recording", name],
+        capture_output=True, text=True, creationflags=0x08000000,  # no console window
+    )
+    print(f"[default mic] {r.stdout.strip() or r.stderr.strip()}", flush=True)
+    return r.returncode == 0
+
+
+def _route_default_mic(s):
+    """Switch the default mic to the virtual cable; return the mic to restore."""
+    if not s.auto_default_mic:
+        return None
+    try:
+        import soundcard as sc
+
+        current = sc.default_microphone().name
+        if "cable" in current.lower():
+            return None  # already routed (e.g. after a crash): leave it
+        if not any("cable output" in m.name.lower() for m in sc.all_microphones()):
+            return None  # VB-CABLE not installed
+        if _set_default_mic("CABLE Output"):
+            return current
+    except Exception as e:
+        print(f"[default mic] {e}", flush=True)
+    return None
+
+
 def run_live() -> None:
     from .config import MODELS_DIR
     from .speak import SpeakPipeline
@@ -145,10 +179,13 @@ def run_live() -> None:
 
     s = load_settings()
     holder: dict = {}
+    restore_mic = _route_default_mic(s)
 
     def quit_all():
         holder["p"].stop()
         holder["sp"].stop()
+        if restore_mic:
+            _set_default_mic(restore_mic.split(" (")[0])
 
     ui = SubtitleWindow(
         s,

@@ -69,6 +69,9 @@ class Settings:
     original_voice_gain: float = 0.15
     mic_speech_threshold: float = 0.012
     speak_on_at_start: bool = False
+    # While the app runs, make "CABLE Output" the Windows default mic so every
+    # app gets it automatically; put your previous mic back on exit.
+    auto_default_mic: bool = True
     speak_hotkey: str = "ctrl+alt+y"
 
 
