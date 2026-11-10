@@ -13,10 +13,23 @@ ON = "#3DDC84"
 OFF = "#F25F5C"
 
 
+def R(text: str) -> str:
+    """Wrap Hebrew in RLM marks. Tk draws left-to-right; the marks keep edge
+    punctuation (: ? .) and symbols (●) on the correct side of the Hebrew."""
+    return f"‏{text}‏" if text else text
+
+
 class SubtitleWindow:
-    def __init__(self, settings, on_toggle: Callable[[], bool], on_quit: Callable[[], None]):
+    def __init__(
+        self, settings, on_toggle: Callable[[], bool], on_quit: Callable[[], None],
+        on_toggle_speak: Callable[[], bool] | None = None,
+    ):
         self.s = settings
         self.on_toggle = on_toggle
+        self.on_toggle_speak = on_toggle_speak
+        self.speak_enabled = bool(settings.speak_on_at_start)
+        self.speak_ready = False
+        self.speak_virtual = True
         self.on_quit = on_quit
         self.events: "queue.Queue[tuple]" = queue.Queue()
         self.history: deque[tuple[str, str]] = deque(maxlen=max(1, settings.history_lines))
@@ -55,17 +68,42 @@ class SubtitleWindow:
         self.hotkey_label = tk.Label(top, text="", bg=BG, fg=MUTED, font=("Segoe UI", 10))
         self.hotkey_label.pack(side="right", padx=(0, 4))
 
+        # Second row: the speaking direction (your Hebrew -> English voice).
+        row2 = tk.Frame(self.root, bg=BG)
+        row2.pack(fill="x", padx=14, pady=(2, 0))
+        self.speak_status = tk.Label(row2, text="", bg=BG, fg=MUTED, font=("Segoe UI", 10))
+        self.speak_status.pack(side="right")
+        self.speak_hint = tk.Label(row2, text="", bg=BG, fg=MUTED, font=("Segoe UI", 10))
+        self.speak_hint.pack(side="right", padx=(0, 12))
+        self.speak_hotkey_label = tk.Label(row2, text="", bg=BG, fg=MUTED, font=("Segoe UI", 10))
+        self.speak_hotkey_label.pack(side="right", padx=(0, 4))
+        self.speak_note = tk.Label(row2, text="", bg=BG, fg=OFF, font=("Segoe UI", 9))
+        self.speak_note.pack(side="left")
+
+        # What the other side last heard from you, in English.
+        sent = tk.Frame(self.root, bg=BG)
+        sent.pack(side="bottom", fill="x", padx=18, pady=(0, 10))
+        self.sent_label = tk.Label(
+            sent, text="", bg=BG, fg="#7FB3FF", font=("Segoe UI", 12), justify="left", anchor="w", wraplength=w - 120,
+        )
+        self.sent_label.pack(side="left", fill="x", expand=True)
+        self.sent_title = tk.Label(sent, text="", bg=BG, fg=MUTED, font=("Segoe UI", 10))
+        self.sent_title.pack(side="right")
+
         self.body = tk.Frame(self.root, bg=BG)
-        self.body.pack(fill="both", expand=True, padx=18, pady=(2, 12))
+        self.body.pack(fill="both", expand=True, padx=18, pady=(2, 6))
         self._render()
 
-        for widget in (self.root, self.body, top, self.status, self.hint, self.hotkey_label):
+        for widget in (self.root, self.body, top, self.status, self.hint, self.hotkey_label, row2,
+                       self.speak_status, self.speak_hint, self.speak_hotkey_label, sent, self.sent_label):
             widget.bind("<ButtonPress-1>", self._start_drag)
             widget.bind("<B1-Motion>", self._drag)
             widget.bind("<Button-3>", self._menu)
 
         self.enabled = True
         self._set_status("טוען מודלים…", MUTED)
+        if self.on_toggle_speak:
+            self._show_speak()
         self.root.after(50, self._poll)
 
     # ---- public, thread-safe -------------------------------------------
@@ -96,6 +134,23 @@ class SubtitleWindow:
                     self._set_status(args[0], OFF)
                 elif kind == "toggle":
                     self._toggle()
+                elif kind == "speak_toggle":
+                    self._toggle_speak()
+                elif kind == "speak_ready":
+                    self.speak_ready = True
+                    self._show_speak()
+                elif kind == "speak_devices":
+                    _mic, _out, virtual = args
+                    self.speak_virtual = virtual
+                    self._show_speak()
+                elif kind == "speak_line":
+                    _he, en = args
+                    self.sent_title.configure(text=R("שמעו ממך:"))
+                    self.sent_label.configure(text=en)
+                    self._render()
+                elif kind == "speak_error":
+                    self.speak_status.configure(text="דיבור: שגיאה ●", fg=OFF)
+                    self.speak_note.configure(text=args[0][:90])
         except queue.Empty:
             pass
         self.root.after(50, self._poll)
@@ -132,13 +187,31 @@ class SubtitleWindow:
 
     def _show_enabled(self) -> None:
         if self.enabled:
-            self._set_status("מתרגם ●", ON, "להשהיה:   ·   קליק ימני = אפשרויות")
+            self._set_status("● כתוביות: מתרגם", ON, "להשהיה:")
         else:
-            self._set_status("מושהה ●", OFF, "להפעלה:")
+            self._set_status("● כתוביות: מושהה", OFF, "להפעלה:")
+
+    def _toggle_speak(self) -> None:
+        if self.on_toggle_speak:
+            self.speak_enabled = self.on_toggle_speak()
+            self._show_speak()
+
+    def _show_speak(self) -> None:
+        hk = self.s.speak_hotkey.replace("+", " + ").title()
+        if self.speak_enabled and not self.speak_ready:
+            self.speak_status.configure(text=R("● דיבור: טוען…"), fg=MUTED)
+        elif self.speak_enabled:
+            self.speak_status.configure(text=R("● דיבור: מתרגם לאנגלית"), fg=ON)
+        else:
+            self.speak_status.configure(text=R("● דיבור: כבוי (הקול שלך עובר רגיל)"), fg=MUTED)
+        self.speak_hint.configure(text=R("להשהיה:" if self.speak_enabled else "להפעלה:"))
+        self.speak_hotkey_label.configure(text=hk)
+        # Separate labels: Tk can't mix Hebrew and Latin in one string.
+        self.speak_note.configure(text="" if self.speak_virtual else R("מצב בדיקה: אין כבל וירטואלי, האנגלית יוצאת לרמקולים"))
 
     def _set_status(self, text: str, color: str, hint: str = "") -> None:
-        self.status.configure(text=text, fg=color)
-        self.hint.configure(text=hint)
+        self.status.configure(text=R(text), fg=color)
+        self.hint.configure(text=R(hint))
         self.hotkey_label.configure(text=self.s.hotkey.replace("+", " + ").title() if hint else "")
 
     def _start_drag(self, e) -> None:
@@ -152,7 +225,9 @@ class SubtitleWindow:
 
     def _menu(self, e) -> None:
         m = tk.Menu(self.root, tearoff=0)
-        m.add_command(label="השהה / המשך", command=self._toggle)
+        m.add_command(label="כתוביות: השהה / המשך", command=self._toggle)
+        if self.on_toggle_speak:
+            m.add_command(label="דיבור לאנגלית: הפעל / כבה", command=self._toggle_speak)
         m.add_command(label="הצג / הסתר אנגלית", command=self._toggle_original)
         m.add_command(label="הגדל טקסט", command=lambda: self._font(+2))
         m.add_command(label="הקטן טקסט", command=lambda: self._font(-2))

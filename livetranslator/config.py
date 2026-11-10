@@ -36,6 +36,31 @@ class Settings:
     # Global on/off hotkey (needs the `keyboard` package).
     hotkey: str = "ctrl+alt+t"
 
+    # ---- Speaking direction: your Hebrew -> English voice --------------
+    # Hebrew needs the "small" model; "base" garbles Hebrew.
+    speak_whisper_model: str = "small"
+    he_en_model_dir: str = str(MODELS_DIR / "he_en" / "translate-he_en-1_5")
+    # English voice. "kokoro" sounds most natural; "piper" is lighter/faster.
+    tts_engine: str = "kokoro"
+    # Kokoro female voices: af_heart (default), af_bella, af_sarah, af_nicole,
+    # bf_emma (British). Samples: samples/voice_kokoro_*.wav
+    kokoro_voice: str = "af_heart"
+    kokoro_speed: float = 1.0
+    # Piper voice name; files live in models/piper/.
+    piper_voice: str = "en_US-hfc_female-medium"
+    # Where the English voice goes. Install VB-CABLE and keep "CABLE Input";
+    # then pick "CABLE Output" as the microphone in Zoom/Meet/etc.
+    # If not found, falls back to your speakers (handy for testing).
+    speak_output_device: str = "CABLE Input"
+    # Your real microphone ("" = Windows default, skipping virtual cables).
+    mic_device: str = ""
+    # How loud your own Hebrew voice is under the translation (0 = silent).
+    # When translation is off, your voice passes through at full volume.
+    original_voice_gain: float = 0.15
+    mic_speech_threshold: float = 0.012
+    speak_on_at_start: bool = False
+    speak_hotkey: str = "ctrl+alt+y"
+
 
 def load_settings() -> Settings:
     s = Settings()

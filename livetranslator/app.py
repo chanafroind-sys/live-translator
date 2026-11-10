@@ -93,11 +93,32 @@ class Pipeline:
 
 
 def run_live() -> None:
+    from .config import MODELS_DIR
+    from .speak import SpeakPipeline
     from .ui import SubtitleWindow
 
     s = load_settings()
     holder: dict = {}
-    ui = SubtitleWindow(s, on_toggle=lambda: holder["p"].toggle(), on_quit=lambda: holder["p"].stop())
+
+    def quit_all():
+        holder["p"].stop()
+        holder["sp"].stop()
+
+    ui = SubtitleWindow(
+        s,
+        on_toggle=lambda: holder["p"].toggle(),
+        on_quit=quit_all,
+        on_toggle_speak=lambda: holder["sp"].toggle(),
+    )
+    sp = SpeakPipeline(
+        s,
+        MODELS_DIR,
+        on_line=lambda he, en, lag: (print(f"[speak +{lag:.1f}s] {he} -> {en}", flush=True), ui.post("speak_line", he, en)),
+        on_status=lambda mic, out, virtual: (print(f"[speak] mic={mic!r} out={out!r} virtual={virtual}", flush=True),
+                                             ui.post("speak_devices", mic, out, virtual)),
+        on_error=lambda t: (print(f"[speak] {t}", flush=True), ui.post("speak_error", t)),
+    )
+    holder["sp"] = sp
     p = Pipeline(
         s,
         on_line=lambda en, he, lag: (print(f"[+{lag:.1f}s] {en} -> {he}", flush=True), ui.post("line", en, he)),
@@ -110,10 +131,72 @@ def run_live() -> None:
         import keyboard
 
         keyboard.add_hotkey(s.hotkey, lambda: ui.post("toggle"))
+        keyboard.add_hotkey(s.speak_hotkey, lambda: ui.post("speak_toggle"))
     except Exception:
-        pass  # hotkey is optional; right-click menu still works
+        pass  # hotkeys are optional; right-click menu still works
     p.start()
+    sp.start()
+
+    def watch_speak_ready():
+        if sp.ready:
+            ui.post("speak_ready")
+        else:
+            ui.root.after(500, watch_speak_ready)
+
+    watch_speak_ready()
     ui.run()
+
+
+def run_speak_file(path: str, out_path: str) -> None:
+    """Hebrew WAV -> English voice WAV, printing timings per phrase."""
+    import wave
+
+    from .config import MODELS_DIR
+    from .engines import Recognizer, Translator, make_voice
+
+    s = load_settings()
+    a = _read_wav(path)
+    rec = Recognizer(s.speak_whisper_model, s.cpu_threads, language="he")
+    tr = Translator(s.he_en_model_dir, s.cpu_threads)
+    voice = make_voice(s, MODELS_DIR)
+    seg = PhraseSegmenter(s.mic_speech_threshold, s.silence_end_sec, s.max_phrase_sec)
+    out = []
+    for i in range(0, len(a) - FRAME, FRAME):
+        phrase = seg.push(a[i:i + FRAME])
+        if phrase is None:
+            continue
+        t0 = time.time()
+        he = rec.transcribe(phrase)
+        t1 = time.time()
+        en = tr.translate(he)
+        t2 = time.time()
+        first = None
+        for pcm in voice.speak(en):
+            first = first or time.time()
+            out.append(pcm)
+        print(f"[{len(phrase) / SAMPLE_RATE:4.1f}s phrase | ASR {t1 - t0:.2f}s | MT {t2 - t1:.2f}s | "
+              f"voice starts {first - t2 if first else 0:.2f}s | total {(first or t2) - t0:.2f}s]")
+        print(f"  HE: {he}\n  EN: {en}")
+    if out:
+        pcm = (np.clip(np.concatenate(out), -1, 1) * 32767).astype(np.int16)
+        with wave.open(out_path, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(voice.sample_rate)
+            w.writeframes(pcm.tobytes())
+        print("English voice saved to", out_path)
+
+
+def _read_wav(path: str) -> np.ndarray:
+    import wave
+
+    w = wave.open(path)
+    sr, ch = w.getframerate(), w.getnchannels()
+    a = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768
+    if ch > 1:
+        a = a.reshape(-1, ch).mean(1)
+    a = np.interp(np.arange(0, len(a), sr / SAMPLE_RATE), np.arange(len(a)), a).astype(np.float32)
+    return np.concatenate([a, np.zeros(SAMPLE_RATE, np.float32)])  # trailing silence
 
 
 def run_file(path: str) -> None:
@@ -123,14 +206,7 @@ def run_file(path: str) -> None:
     from .engines import Recognizer, Translator
 
     s = load_settings()
-    w = wave.open(path)
-    sr, ch = w.getframerate(), w.getnchannels()
-    a = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768
-    if ch > 1:
-        a = a.reshape(-1, ch).mean(1)
-    a = np.interp(np.arange(0, len(a), sr / SAMPLE_RATE), np.arange(len(a)), a).astype(np.float32)
-    a = np.concatenate([a, np.zeros(SAMPLE_RATE, np.float32)])  # trailing silence
-
+    a = _read_wav(path)
     rec = Recognizer(s.whisper_model, s.cpu_threads)
     tr = Translator(s.translation_model_dir, s.cpu_threads)
     seg = PhraseSegmenter(s.speech_threshold, s.silence_end_sec, s.max_phrase_sec)
@@ -155,9 +231,16 @@ def main() -> None:
     else:
         sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description="Live English -> Hebrew subtitles for any audio on this PC")
-    ap.add_argument("--file", help="test on a WAV file instead of live audio")
+    ap.add_argument("--file", help="test subtitles on an English WAV file instead of live audio")
+    ap.add_argument("--speak-file", help="test the speaking direction on a Hebrew WAV file")
+    ap.add_argument("--out", default="english_voice.wav", help="where --speak-file saves the English voice")
     args = ap.parse_args()
-    run_file(args.file) if args.file else run_live()
+    if args.speak_file:
+        run_speak_file(args.speak_file, args.out)
+    elif args.file:
+        run_file(args.file)
+    else:
+        run_live()
 
 
 if __name__ == "__main__":

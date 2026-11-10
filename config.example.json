@@ -8,5 +8,17 @@
   "show_original": true,
   "window_opacity": 0.88,
   "history_lines": 2,
-  "hotkey": "ctrl+alt+t"
+  "hotkey": "ctrl+alt+t",
+
+  "speak_whisper_model": "small",
+  "tts_engine": "kokoro",
+  "kokoro_voice": "af_heart",
+  "kokoro_speed": 1.0,
+  "piper_voice": "en_US-hfc_female-medium",
+  "speak_output_device": "CABLE Input",
+  "mic_device": "",
+  "original_voice_gain": 0.15,
+  "mic_speech_threshold": 0.012,
+  "speak_on_at_start": false,
+  "speak_hotkey": "ctrl+alt+y"
 }
