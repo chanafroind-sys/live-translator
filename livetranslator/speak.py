@@ -21,6 +21,9 @@ import numpy as np
 
 from .audio import FRAME, SAMPLE_RATE, PhraseSegmenter
 
+import re
+
+_FILLER = re.compile(r"[\s.,!?…]*(א+ה+|א+מ+|ה+מ+|א+ה+מ+|אה+ם+|uh+|um+|hmm+)[\s.,!?…]*", re.IGNORECASE)
 OUT_RATE = 48000
 OUT_FRAME = FRAME * OUT_RATE // SAMPLE_RATE  # 1440 samples = 30 ms
 _VIRTUAL = ("cable", "vb-audio", "voicemeeter", "virtual")
@@ -269,10 +272,14 @@ class SpeakPipeline:
             from .app import merge_backlog
 
             audio, ended_at = merge_backlog(self.phrases, audio, ended_at)
+            if np.abs(audio).max() < 0.01:  # a bump or breath, not speech (speech here peaks ~0.04+)
+                continue
             t0 = time.time()
             hebrew = self.recognizer.transcribe(audio)
             print(f"[speak] heard {len(audio) / SAMPLE_RATE:.1f}s (peak {np.abs(audio).max():.3f}), "
                   f"recognised in {time.time() - t0:.1f}s: {hebrew!r}", flush=True)
+            if hebrew and _FILLER.fullmatch(hebrew.strip()):
+                continue  # "אה", "אממ": nothing to say
             if hebrew:
                 # Hand off: the next phrase is recognised while this one is
                 # being translated and voiced.
@@ -289,4 +296,5 @@ class SpeakPipeline:
             t0 = time.time()
             english = self.translator.translate(hebrew)
             print(f"[speak] translated in {time.time() - t0:.1f}s: {english!r}", flush=True)
-            self._queue_voice(hebrew, english, ended_at)
+            if english:
+                self._queue_voice(hebrew, english, ended_at)

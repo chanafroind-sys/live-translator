@@ -77,9 +77,13 @@ class GroqRecognizer:
         peak = float(np.abs(audio).max()) if len(audio) else 0.0
         if 0 < peak < 0.5:
             audio = audio * (0.7 / peak)
-        fields = {"model": self.model, "language": self.language, "response_format": "json", "temperature": "0"}
-        if self.context:
-            fields["prompt"] = self.context[-200:]
+        # verbose_json gives per-segment no_speech_prob, to drop what Whisper
+        # "hears" in noise (its favourite in Hebrew: "תודה רבה.").
+        fields = {"model": self.model, "language": self.language, "response_format": "verbose_json", "temperature": "0"}
+        # Whisper's prompt steers spelling: tech words people mix into Hebrew,
+        # plus the last thing said for names/context.
+        hint = "Backend, Frontend, Refactor, Redesign, Freelance, AI, Agents. " if self.language == "he" else ""
+        fields["prompt"] = (hint + self.context)[-200:] or " "
         boundary = uuid.uuid4().hex
         body = io.BytesIO()
         for k, v in fields.items():
@@ -95,7 +99,15 @@ class GroqRecognizer:
         })
         try:
             with urllib.request.urlopen(req, timeout=self.timeout, context=_CTX) as r:
-                text = json.loads(r.read().decode("utf-8")).get("text", "").strip()
+                data = json.loads(r.read().decode("utf-8"))
+            kept = []
+            for seg in data.get("segments") or []:
+                if seg.get("no_speech_prob", 0) > 0.5 or seg.get("avg_logprob", 0) < -1.0:
+                    print(f"[asr] dropped as non-speech: {seg.get('text', '').strip()!r} "
+                          f"(no_speech {seg.get('no_speech_prob', 0):.2f}, logprob {seg.get('avg_logprob', 0):.2f})", flush=True)
+                    continue
+                kept.append(seg.get("text", "").strip())
+            text = " ".join(kept).strip() if data.get("segments") is not None else data.get("text", "").strip()
         except urllib.error.HTTPError as e:
             print(f"[asr] Groq HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:200]}", flush=True)
             self.failures += 1 if e.code in (400, 401, 403, 404) else 0

@@ -27,8 +27,23 @@ Translate it into natural, spoken {tgt}, the way a professional interpreter \
 would say it out loud: short, clear, conversational. Use the earlier lines \
 only as context to understand what was meant and to fix obvious recognition \
 errors; translate only the new phrase. Keep names, numbers and technical \
-terms exact. If the phrase is an unfinished fragment, translate the fragment \
-as is. Output only the translation, with no quotes, notes or explanations.{glossary}"""
+terms exact. Speakers often mix English tech words into Hebrew, and the \
+recognizer may spell them as Hebrew sound-alikes: "בקן"/"בקנד" = backend, \
+"ריפקטור"/"דריף פקטור" = refactor, "רידיזיין" = redesign, "פרילנס" = freelance.
+
+Whatever you write is spoken aloud to the other side immediately, so the \
+translation field must contain only words the speaker said: never a comment, \
+a correction of yourself, an alternative, or a note about the input. If the \
+phrase is an unfinished fragment, translate the fragment as is. If it is \
+only a filler sound (uh, um, אה, אממ) or unintelligible, return an empty \
+translation.{glossary}"""
+
+_SCHEMA = {
+    "type": "object",
+    "properties": {"translation": {"type": "string"}},
+    "required": ["translation"],
+    "additionalProperties": False,
+}
 
 
 class ClaudeTranslator:
@@ -54,7 +69,9 @@ class ClaudeTranslator:
         body = {
             "model": self.model,
             "max_tokens": 2000,
-            "output_config": {"effort": "low"},  # short phrases: speed matters most
+            # Short phrases: speed matters most. A fixed JSON shape keeps any
+            # commentary out of what gets spoken.
+            "output_config": {"effort": "low", "format": {"type": "json_schema", "schema": _SCHEMA}},
             "fallbacks": "default",  # on a policy decline, retry on another model
             "system": self.system,
             "messages": [{"role": "user", "content": prompt}],
@@ -85,5 +102,9 @@ class ClaudeTranslator:
         self.failures = 0
         if data.get("stop_reason") == "refusal":
             return self.fallback.translate(text)
-        out = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
-        return out or self.fallback.translate(text)
+        raw = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
+        try:
+            return json.loads(raw)["translation"].strip()  # "" = filler: say nothing
+        except (ValueError, KeyError, TypeError):
+            print(f"[claude] unexpected output: {raw[:120]!r}", flush=True)
+            return self.fallback.translate(text)
