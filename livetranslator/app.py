@@ -17,12 +17,25 @@ from .audio import FRAME, SAMPLE_RATE, LoopbackCapture, PhraseSegmenter
 from .config import load_settings
 
 
+def cloud_credentials(settings, on_error=None):
+    """(key, region) when cloud mode is selected and configured, else None."""
+    if settings.engine != "azure":
+        return None
+    from .cloud import azure_credentials
+
+    creds = azure_credentials(settings)
+    if not creds and on_error:
+        on_error("מצב ענן נבחר אבל חסר מפתח Azure: עובד מקומית")
+    return creds
+
+
 class Pipeline:
     """capture -> segment -> recognize -> translate -> callback."""
 
-    def __init__(self, settings, on_line, on_status, on_ready, on_error):
+    def __init__(self, settings, on_line, on_status, on_ready, on_error, on_partial=None):
         self.s = settings
         self.on_line, self.on_status, self.on_ready, self.on_error = on_line, on_status, on_ready, on_error
+        self.on_partial = on_partial or (lambda en, he: None)
         self.enabled = threading.Event()
         self.enabled.set()
         self.stopping = threading.Event()
@@ -46,6 +59,10 @@ class Pipeline:
             self.capture.stop()
 
     def _boot(self) -> None:
+        creds = cloud_credentials(self.s, self.on_error)
+        if creds:
+            self._boot_cloud(*creds)
+            return
         try:
             from .engines import Recognizer, Translator
 
@@ -58,6 +75,35 @@ class Pipeline:
         self.capture.start()
         threading.Thread(target=self._segment_loop, daemon=True, name="segment").start()
         threading.Thread(target=self._work_loop, daemon=True, name="work").start()
+        self.on_ready()
+
+    def _boot_cloud(self, key: str, region: str) -> None:
+        from .cloud import AzureStreamTranslator
+
+        try:
+            self.cloud = AzureStreamTranslator(
+                key, region, "en", "he", self.s.speech_threshold, int(self.s.silence_end_sec * 1000),
+                on_partial=self.on_partial,
+                on_final=lambda en, he, lag: self.on_line(en, he, lag),
+                on_error=self.on_error,
+            )
+        except Exception as e:
+            self.on_error(f"שגיאת ענן: {e}")
+            return
+        self.capture = LoopbackCapture(self.frames)
+        self.capture.start()
+
+        def feed():
+            while not self.stopping.is_set():
+                try:
+                    frame = self.frames.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+                if self.enabled.is_set():  # nothing is sent while paused
+                    self.cloud.push(frame)
+            self.cloud.close()
+
+        threading.Thread(target=feed, daemon=True, name="cloud-feed").start()
         self.on_ready()
 
     def _segment_loop(self) -> None:
@@ -125,8 +171,10 @@ def run_live() -> None:
         on_status=lambda t: ui.post("status", t),
         on_ready=lambda: ui.post("ready"),
         on_error=lambda t: ui.post("error", t),
+        on_partial=lambda en, he: ui.post("partial", en, he),
     )
     holder["p"] = p
+    print(f"[engine] {'azure (cloud)' if cloud_credentials(s) else 'local'}", flush=True)
     try:
         import keyboard
 

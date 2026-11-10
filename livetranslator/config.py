@@ -12,6 +12,16 @@ CONFIG_FILE = ROOT / "config.json"
 
 @dataclass
 class Settings:
+    # "local" = everything on this PC (offline, free, slower).
+    # "azure" = Azure AI Speech (internet, ~1-2 s delay, free tier 5 h/month).
+    engine: str = "local"
+    # Prefer environment variables AZURE_SPEECH_KEY / AZURE_SPEECH_REGION.
+    # If you put them here, keep them in config.json only (git ignores it).
+    azure_key: str = ""
+    azure_region: str = ""
+    # Very natural female voice; also try en-US-JennyNeural, en-US-AriaNeural.
+    azure_voice: str = "en-US-AvaMultilingualNeural"
+
     # Speech recognition (faster-whisper). "base.en" is fast and light;
     # "small.en" is more accurate on accents/noise but ~5x slower.
     whisper_model: str = "base.en"
@@ -75,3 +85,10 @@ def load_settings() -> Settings:
 
 def write_example_config(path: Path) -> None:
     path.write_text(json.dumps(asdict(Settings()), indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def save_setting(name: str, value) -> None:
+    """Change one value in config.json, keeping everything else."""
+    data = json.loads(CONFIG_FILE.read_text(encoding="utf-8")) if CONFIG_FILE.exists() else {}
+    data[name] = value
+    CONFIG_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")

@@ -36,6 +36,18 @@
 - **במצב בדיקה** (אין כבל), האנגלית יוצאת לרמקולים, והקול שלך לא מוחזר אלייך.
 - **הקול מתחיל לפני שכל הטקסט מוכן:** הוא מושמע משפט אחרי משפט.
 
+## מצב ענן (`cloud.py`)
+
+כל הטיפול בקול נשאר זהה: הקלטת מה שהמחשב משמיע, המיקרופון, ה-Mixer והכבל. רק שלבי הזיהוי, התרגום והקול עוברים ל-Azure AI Speech:
+
+- `AzureStreamTranslator`: ‏`TranslationRecognizer` רציף עם `PushAudioInputStream` של 16kHz.
+  - האירוע `recognizing` נותן כתוביות ביניים, והאירוע `recognized` נותן את המשפט הסופי.
+  - סוף משפט נקבע לפי `Speech_SegmentationSilenceTimeoutMs` (ערכו נלקח מ-`silence_end_sec`).
+- **שער דיבור:** פריימים נשלחים רק כשהעוצמה מעל הסף. נשלחים גם 300ms שלפני תחילת הדיבור, ו-1.5 שניות אחרי סופו, כדי ש-Azure יזהה את ההפסקה. בשקט לא נשלח כלום, ולכן לא משלמים עליו.
+- `AzureVoice`: ‏`SpeechSynthesizer` ‏(SSML, ‏24kHz PCM) נכנס לאותו תור של ה-Mixer שמשמש את Kokoro.
+- הבחירה במנוע: `engine` ב-`config.json`. המפתח נקרא קודם ממשתני הסביבה `AZURE_SPEECH_KEY` ו-`AZURE_SPEECH_REGION`. אם אין מפתח, התוכנה חוזרת למצב מקומי.
+- **החלפת מנוע מהתפריט:** נשמרת ב-`config.json`, והתוכנה מופעלת מחדש עם `os.execv`.
+
 ## קבצים
 
 | קובץ | תפקיד |
@@ -44,6 +56,7 @@
 | `livetranslator/audio.py` | הקלטת loopback וחיתוך למשפטים |
 | `livetranslator/engines.py` | זיהוי דיבור, תרגום וקול (Kokoro / Piper) |
 | `livetranslator/spm_tokenizer.py` | קריאת קובץ SentencePiece בלי הספרייה `sentencepiece` (ראו למטה) |
+| `livetranslator/cloud.py` | מצב ענן: תרגום רציף וקול של Azure |
 | `livetranslator/speak.py` | כיוון הדיבור: מיקרופון ← אנגלית ← מיקרופון וירטואלי |
 | `livetranslator/ui.py` | חלון הכתוביות ושורת הסטטוס של שני הכיוונים |
 | `livetranslator/config.py` | הגדרות ברירת מחדל וקריאת `config.json` |

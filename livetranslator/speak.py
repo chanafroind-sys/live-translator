@@ -142,6 +142,12 @@ class SpeakPipeline:
 
     # ---- recognition / translation / voice ------------------------------
     def _boot_models(self) -> None:
+        from .app import cloud_credentials
+
+        creds = cloud_credentials(self.s)
+        if creds:
+            self._boot_cloud(*creds)
+            return
         try:
             from .engines import Recognizer, Translator, make_voice
 
@@ -154,6 +160,62 @@ class SpeakPipeline:
         self.ready = True
         threading.Thread(target=self._segment_loop, daemon=True, name="speak-seg").start()
         threading.Thread(target=self._work_loop, daemon=True, name="speak-work").start()
+
+    def _boot_cloud(self, key: str, region: str) -> None:
+        """Azure: streaming he->en translation, then an Azure neural voice."""
+        from .cloud import AzureStreamTranslator, AzureVoice
+
+        finals: "queue.Queue[tuple[str, str, float]]" = queue.Queue()
+        try:
+            self.voice = AzureVoice(key, region, self.s.azure_voice)
+            self.cloud = AzureStreamTranslator(
+                key, region, "he", "en", self.s.mic_speech_threshold, int(self.s.silence_end_sec * 1000),
+                on_partial=lambda he, en: None,
+                on_final=lambda he, en, lag: finals.put((he, en, time.time())),
+                on_error=self.on_error,
+            )
+        except Exception as e:
+            self.on_error(f"שגיאת ענן: {e}")
+            return
+
+        def feed():
+            while not self.stopping.is_set():
+                try:
+                    frame = self.seg_frames.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+                if self.enabled.is_set():  # nothing is sent while off
+                    self.cloud.push(frame)
+            self.cloud.close()
+
+        def speak():
+            while not self.stopping.is_set():
+                try:
+                    he, en, got_at = finals.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+                if not self.enabled.is_set() or not en:
+                    continue
+                try:
+                    self._queue_voice(he, en, got_at)
+                except Exception as e:
+                    self.on_error(str(e))
+
+        threading.Thread(target=feed, daemon=True, name="speak-cloud-feed").start()
+        threading.Thread(target=speak, daemon=True, name="speak-cloud-voice").start()
+        self.ready = True
+
+    def _queue_voice(self, hebrew: str, english: str, since: float) -> None:
+        first = True
+        for pcm in self.voice.speak(english):
+            if not self.enabled.is_set():
+                break
+            pcm = _resample(pcm, self.voice.sample_rate, OUT_RATE)
+            with self.tts_lock:
+                self.tts = np.concatenate([self.tts, pcm])
+            if first:
+                self.on_line(hebrew, english, time.time() - since)
+                first = False
 
     def _segment_loop(self) -> None:
         seg = PhraseSegmenter(self.s.mic_speech_threshold, self.s.silence_end_sec, self.s.max_phrase_sec)
@@ -184,13 +246,4 @@ class SpeakPipeline:
             if not hebrew:
                 continue
             english = self.translator.translate(hebrew)
-            first = True
-            for pcm in self.voice.speak(english):
-                if not self.enabled.is_set():
-                    break
-                pcm = _resample(pcm, self.voice.sample_rate, OUT_RATE)
-                with self.tts_lock:
-                    self.tts = np.concatenate([self.tts, pcm])
-                if first:
-                    self.on_line(hebrew, english, time.time() - ended_at)
-                    first = False
+            self._queue_voice(hebrew, english, ended_at)

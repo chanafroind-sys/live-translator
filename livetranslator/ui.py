@@ -125,7 +125,12 @@ class SubtitleWindow:
                 if kind == "line":
                     english, hebrew = args
                     self.history.append((english, hebrew))
+                    self.partial = None
                     self._render()
+                elif kind == "partial":  # cloud mode: text while the sentence is still going
+                    if args[1]:
+                        self.partial = args
+                        self._render()
                 elif kind == "ready":
                     self._show_enabled()
                 elif kind == "status":
@@ -158,10 +163,12 @@ class SubtitleWindow:
     def _render(self) -> None:
         for child in self.body.winfo_children():
             child.destroy()
-        if not self.history:
+        partial = getattr(self, "partial", None)
+        lines = list(self.history) + ([partial] if partial else [])
+        if not lines:
             tk.Label(self.body, text="…", bg=BG, fg=MUTED, font=("Segoe UI", self.s.font_size)).pack(anchor="e")
-        for i, (en, he) in enumerate(self.history):
-            last = i == len(self.history) - 1
+        for i, (en, he) in enumerate(lines[-max(1, self.s.history_lines):]):
+            last = i == len(lines[-max(1, self.s.history_lines):]) - 1
             # Windows draws each label left-to-right; RLM marks make trailing
             # punctuation (? . ,) stick to the Hebrew and land on the left.
             tk.Label(
@@ -186,10 +193,11 @@ class SubtitleWindow:
         self._show_enabled()
 
     def _show_enabled(self) -> None:
+        where = "ענן" if self.s.engine == "azure" else "מקומי"
         if self.enabled:
-            self._set_status("● כתוביות: מתרגם", ON, "להשהיה:")
+            self._set_status(f"● כתוביות: מתרגם ({where})", ON, "להשהיה:")
         else:
-            self._set_status("● כתוביות: מושהה", OFF, "להפעלה:")
+            self._set_status(f"● כתוביות: מושהה ({where})", OFF, "להפעלה:")
 
     def _toggle_speak(self) -> None:
         if self.on_toggle_speak:
@@ -229,12 +237,26 @@ class SubtitleWindow:
         if self.on_toggle_speak:
             m.add_command(label="דיבור לאנגלית: הפעל / כבה", command=self._toggle_speak)
         m.add_command(label="הצג / הסתר אנגלית", command=self._toggle_original)
+        other = "מקומי" if self.s.engine == "azure" else "ענן (Azure)"
+        m.add_command(label=f"עבור למנוע: {other} (הפעלה מחדש)", command=self._switch_engine)
         m.add_command(label="הגדל טקסט", command=lambda: self._font(+2))
         m.add_command(label="הקטן טקסט", command=lambda: self._font(-2))
         m.add_command(label="נקה", command=self._clear)
         m.add_separator()
         m.add_command(label="יציאה", command=self.quit)
         m.tk_popup(e.x_root, e.y_root)
+
+    def _switch_engine(self) -> None:
+        """Save the other engine to config.json and restart the app."""
+        import os
+        import sys
+
+        from .config import save_setting
+
+        save_setting("engine", "local" if self.s.engine == "azure" else "azure")
+        self.on_quit()
+        self.root.destroy()
+        os.execv(sys.executable, [sys.executable, "-W", "ignore", "-m", "livetranslator"])
 
     def _toggle_original(self) -> None:
         self.s.show_original = not self.s.show_original
