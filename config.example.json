@@ -1,0 +1,12 @@
+{
+  "whisper_model": "base.en",
+  "cpu_threads": 4,
+  "silence_end_sec": 0.5,
+  "max_phrase_sec": 6.0,
+  "speech_threshold": 0.006,
+  "font_size": 24,
+  "show_original": true,
+  "window_opacity": 0.88,
+  "history_lines": 2,
+  "hotkey": "ctrl+alt+t"
+}

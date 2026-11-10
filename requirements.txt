@@ -1,0 +1,6 @@
+faster-whisper>=1.2
+ctranslate2>=4.6
+tokenizers>=0.20
+soundcard>=0.4.4
+numpy>=2.0
+keyboard>=0.13
