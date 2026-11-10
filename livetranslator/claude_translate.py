@@ -68,6 +68,28 @@ Israelis write them in Hebrew letters (e.g. דיפלוי, קוברנטיס, מי
 directions."""
 
 _CLAUSE_END = re.compile(r"[,;:.!?]\s*$")
+_META = re.compile(
+    r"\b(the (phrase|sentence|speaker|input|text) (is|says|means)|translation|translated|"
+    r"wait,|let me|i think (you|this|it) mean|note:|did you mean|correction|fragment)\b",
+    re.IGNORECASE,
+)
+_LATIN_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
+
+
+def _is_commentary(clause: str, source: str, target: str) -> bool:
+    """Catch the interpreter talking *about* the phrase instead of translating.
+
+    Seen live: "Outputs" -> 'Kubernetes-ו-NetExt? No, the phrase is: "Outputs"'.
+    English target: meta phrases. Hebrew target: English words that were not
+    in what they said (names and terms they did say are fine).
+    """
+    if _META.search(clause):
+        return True
+    if target == "he":
+        said = {w.lower() for w in _LATIN_WORD.findall(source)}
+        extra = [w for w in _LATIN_WORD.findall(clause) if w.lower() not in said]
+        return len(extra) >= 2
+    return False
 
 
 class ClaudeTranslator:
@@ -124,6 +146,10 @@ class ClaudeTranslator:
             (f"Speaker's own terms (the recognizer may write them in Hebrew letters):\n{terms}\n\n" if terms else "")
             + (f"Earlier lines (context only):\n{context}\n\n" if context else "")
             + f"New phrase:\n{text}"
+            # Repeated at the end, where a small fast model follows it best.
+            + ("\n\n(Hebrew letters only, also for names and terms. Example: \"I worked on Java and "
+               "Hibernate at Matrix IT\" -> \"עבדתי על ג'אווה והייברנייט במטריקס איי-טי\")"
+               if self.tgt == "he" else "")
         )
         body = {
             "model": self.model,
@@ -164,12 +190,21 @@ class ClaudeTranslator:
                         piece = buf.strip()
                         buf = ""
                         if piece and piece != _FILLER_MARK:
+                            if _is_commentary(piece, text, self.tgt):
+                                print(f"[claude] dropped commentary: {piece!r}", flush=True)
+                                session.conn.close()
+                                session.conn = None
+                                buf = ""
+                                break
                             sent_any = True
                             yield piece
                 piece = buf.strip()
                 if piece and piece != _FILLER_MARK:
-                    sent_any = True
-                    yield piece
+                    if _is_commentary(piece, text, self.tgt):
+                        print(f"[claude] dropped commentary: {piece!r}", flush=True)
+                    else:
+                        sent_any = True
+                        yield piece
             self.failures = 0
             if refused and not sent_any:
                 yield self.fallback.translate(text)

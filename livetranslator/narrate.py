@@ -48,7 +48,10 @@ class Narrator:
     def __init__(self, settings, models_dir):
         self.s = settings
         self.models_dir = models_dir
-        self.texts: "queue.Queue[str]" = queue.Queue()
+        # (priority, order, queued_at, text): translations (0) always before
+        # term explanations (1), so an explanation never delays a translation.
+        self.texts: "queue.PriorityQueue[tuple]" = queue.PriorityQueue()
+        self._order = 0
         self.on = threading.Event()
         self.quiet_until = 0.0
         self.speaking = False  # from taking a text until its audio has played
@@ -86,9 +89,10 @@ class Narrator:
         self.set(not self.on.is_set())
         return self.on.is_set()
 
-    def say(self, hebrew: str) -> None:
+    def say(self, hebrew: str, explanation: bool = False) -> None:
         if self.on.is_set() and hebrew:
-            self.texts.put(hebrew)
+            self._order += 1
+            self.texts.put((1 if explanation else 0, self._order, time.time(), hebrew))
 
     def busy(self) -> bool:
         """True while we are (about to be) speaking, plus a short tail."""
@@ -155,12 +159,14 @@ class Narrator:
                 with sc.default_speaker().player(samplerate=rate, channels=1, blocksize=block) as player:
                     while True:
                         try:
-                            text = self.texts.get(timeout=0.05)
+                            priority, _, queued_at, text = self.texts.get(timeout=0.05)
                         except queue.Empty:
                             player.play(silence)
                             continue
                         if not self.on.is_set():
                             continue
+                        if priority and time.time() - queued_at > 8:
+                            continue  # explanation went stale while they kept talking
                         self.speaking = True
                         try:
                             t0 = time.time()

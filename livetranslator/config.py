@@ -65,6 +65,10 @@ class Settings:
     # Hebrew narration of what they say (Ctrl+Alt+H or the tray menu).
     narrate_on_at_start: bool = False
     narrate_hotkey: str = "ctrl+alt+h"
+    # Short Hebrew explanations of hard terms they used, after the
+    # translation (Ctrl+Alt+E). Tailored by about_me.txt. Needs Claude.
+    explain_hotkey: str = "ctrl+alt+e"
+    explain_on_at_start: bool = False
     hebrew_voice: str = "he_IL-saspeech-medium"
     # While narrating, other apps (Zoom, browser) play at this share of their volume.
     duck_volume: float = 0.3

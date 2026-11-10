@@ -1,4 +1,4 @@
-"""End-to-end test of Hebrew narration.
+﻿"""End-to-end test of Hebrew narration.
 
 Starts the app with narration on, plays an English recording on the
 speakers (as if someone spoke in Zoom), records everything the speakers play
@@ -32,7 +32,7 @@ def main(wav: str) -> None:
     cfg = ROOT / "config.json"
     backup = cfg.read_text(encoding="utf-8-sig") if cfg.exists() else None
     data = json.loads(backup) if backup else {}
-    data.update({"narrate_on_at_start": True, "start_hidden": True, "speak_on_at_start": False})
+    data.update({"narrate_on_at_start": True, "explain_on_at_start": True, "start_hidden": True, "speak_on_at_start": False})
     cfg.write_text(json.dumps(data), encoding="utf-8")
     log = ROOT / "e2e.log"
     app = subprocess.Popen([sys.executable, "-W", "ignore", "-m", "livetranslator"], cwd=ROOT,
@@ -84,7 +84,7 @@ def main(wav: str) -> None:
         print(f"  {s.start:5.1f}s  {s.text.strip()}")
     print("\nApp log:")
     for line in log.read_text(encoding="utf-8").splitlines():
-        if line.startswith(("[+", "[narrate]")):
+        if line.startswith(("[+", "[narrate]", "[explain]")):
             print(line)
 
 

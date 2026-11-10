@@ -138,8 +138,11 @@ class SubtitleWindow:
             "fast_voice": self.s.tts_engine == "piper",
             "narrate": bool(self.narrator and self.narrator.on.is_set()),
             "polish": self.polish_on,
+            "explain": bool(self.explainer and self.explainer.on.is_set()),
         }
 
+    explainer = None
+    explanation = None
     polish_on = False
     on_toggle_polish = None
 
@@ -180,6 +183,7 @@ class SubtitleWindow:
                     english, hebrew = args
                     self.history.append((english, hebrew))
                     self.partial = None
+                    self.explanation = None  # belongs to the previous line
                     self._render()
                 elif kind == "partial":  # cloud mode: text while the sentence is still going
                     if args[1]:
@@ -213,6 +217,21 @@ class SubtitleWindow:
                     self._refresh_tray()
                     if self.tray:
                         self.tray.notify("הקראה בעברית: " + ("פועלת" if on else "כבויה"))
+                elif kind == "explain":
+                    self.explanation = args[0]
+                    self._render()
+                elif kind == "explain_toggle" and self.explainer:
+                    if not self.explainer.available:
+                        msg = "הסברים זמינים רק עם Claude"
+                    else:
+                        on = self.explainer.toggle()
+                        msg = "הסברי מונחים: " + ("פועלים" if on else "כבויים")
+                        if not on:
+                            self.explanation = None
+                            self._render()
+                    self._refresh_tray()
+                    if self.tray:
+                        self.tray.notify(msg)
                 elif kind == "polish_toggle" and self.on_toggle_polish:
                     on = self.on_toggle_polish()
                     msg = ("ניסוח משופר זמין רק עם Claude" if on is None
@@ -270,6 +289,13 @@ class SubtitleWindow:
                     self.body, text=en, bg=BG, fg=MUTED, font=("Segoe UI", max(10, int(self.s.font_size * 0.5))),
                     justify="left", anchor="w", wraplength=self.wrap,
                 ).pack(fill="x", anchor="w", pady=(2, 0))
+        for _term, term_he, expl in self.explanation or []:
+            # All-Hebrew line (term in Hebrew letters): no mixed directions.
+            tk.Label(
+                self.body, text=R(f"💡 {term_he}: {expl}"), bg=BG, fg="#FFD166",
+                font=("Segoe UI", max(11, int(self.s.font_size * 0.6))),
+                justify="right", anchor="e", wraplength=self.wrap,
+            ).pack(fill="x", anchor="e", pady=(2, 0))
         self.root.update_idletasks()
         # Grow upward: keep the window's bottom edge where it is.
         h = self.root.winfo_reqheight()

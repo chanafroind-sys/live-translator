@@ -35,6 +35,8 @@ class Tray:
             Item("תרגום הדיבור שלי לאנגלית", lambda: post("speak_toggle"), checked=st("speak")),
             Item("ניסוח משופר של מה שאני אומרת", lambda: post("polish_toggle"), checked=st("polish")),
             Item("הקראה בעברית של מה שהם אומרים", lambda: post("narrate_toggle"), checked=st("narrate")),
+            Item("הסברים למונחים קשים", lambda: post("explain_toggle"), checked=st("explain")),
+            Item("מה אני יודעת (בשביל ההסברים)…", self._open_profile),
             Item("קול מהיר (פחות טבעי)", lambda: post("voice_toggle"), checked=st("fast_voice")),
             Item("מילון מונחים ושמות…", self._open_vocabulary),
             Menu.SEPARATOR,
@@ -51,6 +53,15 @@ class Tray:
 
         _load()  # creates vocabulary.txt from the example on first use
         os.startfile(str(FILE))  # opens in Notepad; saved changes apply at once
+
+    @staticmethod
+    def _open_profile() -> None:
+        import os
+
+        from .explain import PROFILE, _profile
+
+        _profile()  # creates about_me.txt from the example on first use
+        os.startfile(str(PROFILE))
 
     def refresh(self) -> None:
         s = self.get_state()

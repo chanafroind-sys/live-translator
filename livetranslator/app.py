@@ -61,6 +61,7 @@ class Pipeline:
         self.phrases: "queue.Queue[tuple[np.ndarray, float]]" = queue.Queue(maxsize=8)
         self.capture: LoopbackCapture | None = None
         self.narrator = None  # set by run_live
+        self.explainer = None  # set by run_live
 
     def active(self) -> bool:
         """Listening is needed for subtitles (window open) or narration."""
@@ -198,6 +199,8 @@ class Pipeline:
                     self.narrator.say(hebrew)
             if hebrew:  # "" = filler ("uh", "um"): no subtitle
                 self.on_line(english, hebrew, time.time() - ended_at)
+                if self.explainer:  # separate, later call: never delays the line above
+                    self.explainer.submit(english)
 
 
 def _set_default_mic(name: str) -> bool:
@@ -294,6 +297,18 @@ def run_live() -> None:
     net.on_blocked = lambda msg: ui.post("notify", msg)
     p.narrator = narrator
     ui.narrator = narrator
+    from .explain import Explainer
+
+    def on_explanation(items):
+        ui.post("explain", items)
+        for _term, term_he, expl in items:  # spoken after the translation, if narrating
+            narrator.say(f"{term_he}: {expl}", explanation=True)
+
+    explainer = Explainer(s.claude_model, on_explanation)
+    if s.explain_on_at_start:
+        explainer.on.set()
+    p.explainer = explainer
+    ui.explainer = explainer
     if s.narrate_on_at_start:
         narrator.set(True)
     print(f"[engine] {'azure (cloud)' if cloud_credentials(s) else 'local'}", flush=True)
@@ -306,6 +321,7 @@ def run_live() -> None:
             s.window_hotkey: lambda: ui.post("window_toggle"),
             s.narrate_hotkey: lambda: ui.post("narrate_toggle"),
             s.polish_hotkey: lambda: ui.post("polish_toggle"),
+            s.explain_hotkey: lambda: ui.post("explain_toggle"),
         })
     except Exception as e:
         print(f"[hotkey] unavailable: {e}", flush=True)  # tray menu still works
