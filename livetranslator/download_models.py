@@ -48,8 +48,14 @@ def main() -> None:
     os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
     s = load_settings()
 
-    _argos("en_he")  # subtitles: English -> Hebrew
-    _argos("he_en")  # speaking:  Hebrew -> English
+    _argos("en_he")  # subtitles: English -> Hebrew (light fallback)
+    _argos("he_en")  # speaking:  Hebrew -> English (light fallback)
+
+    from huggingface_hub import snapshot_download
+
+    print("Translation model NLLB-200 600M (~620 MB, downloads if needed)...")
+    snapshot_download("JustFrederik/nllb-200-distilled-600M-ct2-int8", local_dir=str(MODELS_DIR / "nllb-600m"))
+    print("Translation model NLLB: OK")
 
     from faster_whisper import WhisperModel
 

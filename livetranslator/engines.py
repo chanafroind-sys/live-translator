@@ -71,6 +71,65 @@ class Translator:
         return self.tok.decoder.decode(r[0].hypotheses[0]).strip()
 
 
+_NLLB_CODES = {"en": "eng_Latn", "he": "heb_Hebr"}
+_nllb_shared = {}
+_nllb_lock = __import__("threading").Lock()
+
+
+class NllbTranslator:
+    """Meta's NLLB-200 (600M, int8). Far better Hebrew than the Argos models
+    (measured: "זה דולק" -> "It's on" instead of "It's fucked"), ~0.3-0.6 s
+    per phrase. One model instance is shared by both directions."""
+
+    def __init__(self, model_dir: Path, src: str, tgt: str, cpu_threads: int):
+        import ctranslate2
+        from tokenizers import Tokenizer
+
+        if not (Path(model_dir) / "model.bin").exists():
+            raise FileNotFoundError(
+                f"NLLB model not found at {model_dir}. Run: .venv\\Scripts\\python -m livetranslator.download_models"
+            )
+        with _nllb_lock:
+            key = str(model_dir)
+            if key not in _nllb_shared:
+                _nllb_shared[key] = (
+                    ctranslate2.Translator(str(model_dir), device="cpu", compute_type="int8",
+                                           intra_threads=max(1, cpu_threads)),
+                    Tokenizer.from_file(str(Path(model_dir) / "tokenizer.json")),
+                )
+        self.model, self.tok = _nllb_shared[key]
+        self.src, self.tgt = _NLLB_CODES[src], _NLLB_CODES[tgt]
+
+    def translate(self, text: str) -> str:
+        if not text:
+            return ""
+        tokens = [self.src] + self.tok.encode(text, add_special_tokens=False).tokens + ["</s>"]
+        r = self.model.translate_batch([tokens], target_prefix=[[self.tgt]], beam_size=2, max_decoding_length=256)
+        ids = [self.tok.token_to_id(t) for t in r[0].hypotheses[0] if t != self.tgt]
+        return self.tok.decode([i for i in ids if i is not None]).strip()
+
+
+def make_translator(settings, src: str, tgt: str, model_dir: str):
+    """Local translator (NLLB, or Argos), wrapped by Claude when a key is set."""
+    from .config import MODELS_DIR
+
+    try:
+        if settings.local_translator != "nllb":
+            raise FileNotFoundError("argos selected")
+        local = NllbTranslator(MODELS_DIR / "nllb-600m", src, tgt, settings.cpu_threads)
+    except FileNotFoundError as e:
+        if "argos" not in str(e):
+            print(f"[translate] {e} - using Argos", flush=True)
+        local = Translator(model_dir, settings.cpu_threads)
+    if settings.claude_translation and os.environ.get("ANTHROPIC_API_KEY"):
+        from .claude_translate import ClaudeTranslator
+
+        print(f"[translate] {src}->{tgt}: Claude ({settings.claude_model})", flush=True)
+        return ClaudeTranslator(src, tgt, settings.claude_model, settings.glossary, fallback=local)
+    print(f"[translate] {src}->{tgt}: local ({type(local).__name__})", flush=True)
+    return local
+
+
 def short_path(p) -> str:
     """8.3 short form of a path. espeak-ng (inside Piper) cannot open paths
     with non-ASCII characters, e.g. a Hebrew Windows user name."""

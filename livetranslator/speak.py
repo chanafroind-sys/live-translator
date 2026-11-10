@@ -149,10 +149,10 @@ class SpeakPipeline:
             self._boot_cloud(*creds)
             return
         try:
-            from .engines import Recognizer, Translator, make_voice
+            from .engines import Recognizer, make_translator, make_voice
 
             self.recognizer = Recognizer(self.s.speak_whisper_model, self.s.cpu_threads, language="he")
-            self.translator = Translator(self.s.he_en_model_dir, self.s.cpu_threads)
+            self.translator = make_translator(self.s, "he", "en", self.s.he_en_model_dir)
             self.voice = make_voice(self.s, self.models_dir)
         except Exception as e:
             self.on_error(f"שגיאה בטעינת מודלי דיבור: {e}")
@@ -242,6 +242,9 @@ class SpeakPipeline:
                 continue
             if not self.enabled.is_set():
                 continue
+            from .app import merge_backlog
+
+            audio, ended_at = merge_backlog(self.phrases, audio, ended_at)
             hebrew = self.recognizer.transcribe(audio)
             if not hebrew:
                 continue

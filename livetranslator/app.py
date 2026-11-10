@@ -17,6 +17,24 @@ from .audio import FRAME, SAMPLE_RATE, LoopbackCapture, PhraseSegmenter
 from .config import load_settings
 
 
+def merge_backlog(q, audio, ended_at, max_sec: float = 20.0):
+    """If phrases piled up while we were busy, recognise them in one pass.
+
+    One Whisper call on 12 s of audio is much faster than four calls on 3 s,
+    so a slow moment no longer snowballs into a growing delay.
+    """
+    parts = [audio]
+    while sum(len(p) for p in parts) < max_sec * SAMPLE_RATE:
+        try:
+            nxt, ended_at = q.get_nowait()
+        except queue.Empty:
+            break
+        parts.append(nxt)
+    if len(parts) > 1:
+        print(f"[backlog] merged {len(parts)} phrases", flush=True)
+    return np.concatenate(parts), ended_at
+
+
 def cloud_credentials(settings, on_error=None):
     """(key, region) when cloud mode is selected and configured, else None."""
     if settings.engine != "azure":
@@ -64,10 +82,10 @@ class Pipeline:
             self._boot_cloud(*creds)
             return
         try:
-            from .engines import Recognizer, Translator
+            from .engines import Recognizer, make_translator
 
             self.recognizer = Recognizer(self.s.whisper_model, self.s.cpu_threads)
-            self.translator = Translator(self.s.translation_model_dir, self.s.cpu_threads)
+            self.translator = make_translator(self.s, "en", "he", self.s.translation_model_dir)
         except Exception as e:
             self.on_error(f"שגיאה בטעינת מודלים: {e}")
             return
@@ -131,6 +149,7 @@ class Pipeline:
                 audio, ended_at = self.phrases.get(timeout=0.2)
             except queue.Empty:
                 continue
+            audio, ended_at = merge_backlog(self.phrases, audio, ended_at)
             english = self.recognizer.transcribe(audio)
             if not english:
                 continue
@@ -254,12 +273,12 @@ def run_speak_file(path: str, out_path: str) -> None:
     import wave
 
     from .config import MODELS_DIR
-    from .engines import Recognizer, Translator, make_voice
+    from .engines import Recognizer, make_translator, make_voice
 
     s = load_settings()
     a = _read_wav(path)
     rec = Recognizer(s.speak_whisper_model, s.cpu_threads, language="he")
-    tr = Translator(s.he_en_model_dir, s.cpu_threads)
+    tr = make_translator(s, "he", "en", s.he_en_model_dir)
     voice = make_voice(s, MODELS_DIR)
     seg = PhraseSegmenter(s.mic_speech_threshold, s.silence_end_sec, s.max_phrase_sec)
     out = []
@@ -305,12 +324,12 @@ def run_file(path: str) -> None:
     """Feed a WAV file through the same pipeline in real time and print timings."""
     import wave
 
-    from .engines import Recognizer, Translator
+    from .engines import Recognizer, make_translator
 
     s = load_settings()
     a = _read_wav(path)
     rec = Recognizer(s.whisper_model, s.cpu_threads)
-    tr = Translator(s.translation_model_dir, s.cpu_threads)
+    tr = make_translator(s, "en", "he", s.translation_model_dir)
     seg = PhraseSegmenter(s.speech_threshold, s.silence_end_sec, s.max_phrase_sec)
     for i in range(0, len(a) - FRAME, FRAME):
         phrase = seg.push(a[i:i + FRAME])

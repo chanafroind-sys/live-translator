@@ -22,6 +22,16 @@ class Settings:
     # Very natural female voice; also try en-US-JennyNeural, en-US-AriaNeural.
     azure_voice: str = "en-US-AvaMultilingualNeural"
 
+    # Translate with Claude when ANTHROPIC_API_KEY is set (internet). Much
+    # better than the local model and fixes speech-recognition slips; falls
+    # back to local automatically when offline.
+    claude_translation: bool = True
+    # Offline translator: "nllb" (much better, 620 MB) or "argos" (130 MB).
+    local_translator: str = "nllb"
+    claude_model: str = "claude-opus-5-5"
+    # Names/terms to always translate the same way, e.g. "Deel = Deel; מוצר = product".
+    glossary: str = ""
+
     # Speech recognition (faster-whisper). "base.en" is fast and light;
     # "small.en" is more accurate on accents/noise but ~5x slower.
     whisper_model: str = "base.en"
