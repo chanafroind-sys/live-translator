@@ -60,6 +60,11 @@ class Pipeline:
         self.frames: "queue.Queue[np.ndarray]" = queue.Queue()
         self.phrases: "queue.Queue[tuple[np.ndarray, float]]" = queue.Queue(maxsize=8)
         self.capture: LoopbackCapture | None = None
+        self.narrator = None  # set by run_live
+
+    def active(self) -> bool:
+        """Listening is needed for subtitles (window open) or narration."""
+        return self.enabled.is_set() or bool(self.narrator and self.narrator.on.is_set())
 
     def toggle(self) -> bool:
         if self.enabled.is_set():
@@ -89,11 +94,28 @@ class Pipeline:
         except Exception as e:
             self.on_error(f"שגיאה בטעינת מודלים: {e}")
             return
-        self.capture = LoopbackCapture(self.frames)
-        self.capture.start()
+        self.capture = self._open_capture()
         threading.Thread(target=self._segment_loop, daemon=True, name="segment").start()
         threading.Thread(target=self._work_loop, daemon=True, name="work").start()
         self.on_ready()
+
+    def _open_capture(self):
+        """Hear what the PC plays, preferably without our own narration."""
+        try:
+            from .process_loopback import ExcludeSelfCapture
+
+            cap = ExcludeSelfCapture(self.frames)
+            cap.start()
+            cap.started_ok.wait(10)
+            if cap.error is None:
+                print("[capture] all apps except this one", flush=True)
+                return cap
+            print(f"[capture] process loopback unavailable ({cap.error}); using plain loopback", flush=True)
+        except Exception as e:
+            print(f"[capture] process loopback unavailable ({e}); using plain loopback", flush=True)
+        cap = LoopbackCapture(self.frames)
+        cap.start()
+        return cap
 
     def _boot_cloud(self, key: str, region: str) -> None:
         from .cloud import AzureStreamTranslator
@@ -108,8 +130,7 @@ class Pipeline:
         except Exception as e:
             self.on_error(f"שגיאת ענן: {e}")
             return
-        self.capture = LoopbackCapture(self.frames)
-        self.capture.start()
+        self.capture = self._open_capture()
 
         def feed():
             while not self.stopping.is_set():
@@ -125,7 +146,12 @@ class Pipeline:
         self.on_ready()
 
     def _segment_loop(self) -> None:
-        seg = PhraseSegmenter(self.s.speech_threshold, self.s.silence_end_sec, self.s.max_phrase_sec)
+        # Adaptive: while narrating, other apps are turned down, so their
+        # level in "what the PC plays" drops; a fixed threshold would miss it.
+        def new_seg():
+            return PhraseSegmenter(self.s.speech_threshold, self.s.silence_end_sec, self.s.max_phrase_sec, adaptive=True)
+
+        seg = new_seg()
         while not self.stopping.is_set():
             try:
                 frame = self.frames.get(timeout=0.1)
@@ -135,8 +161,12 @@ class Pipeline:
                     self.on_error(f"שגיאת שמע: {self.capture.error}")
                     return
             else:
-                phrase = seg.push(frame) if self.enabled.is_set() else None
-            if phrase is not None and self.enabled.is_set():
+                if self.narrator and self.narrator.busy() and not getattr(self.capture, "excludes_self", False):
+                    # Plain loopback hears our own Hebrew voice: skip it.
+                    seg = new_seg()
+                    continue
+                phrase = seg.push(frame) if self.active() else None
+            if phrase is not None and self.active():
                 try:
                     self.phrases.put_nowait((phrase, time.time()))
                 except queue.Full:  # falling behind: drop oldest to stay live
@@ -156,6 +186,8 @@ class Pipeline:
             hebrew = self.translator.translate(english)
             if hebrew:  # "" = filler ("uh", "um"): no subtitle
                 self.on_line(english, hebrew, time.time() - ended_at)
+                if self.narrator:
+                    self.narrator.say(hebrew)
 
 
 def _set_default_mic(name: str) -> bool:
@@ -204,7 +236,15 @@ def run_live() -> None:
     holder: dict = {}
     restore_mic = _route_default_mic(s)
 
+    from .narrate import Narrator
+
+    narrator = Narrator(s, MODELS_DIR)
+    import atexit
+
+    atexit.register(narrator.close)  # never leave other apps turned down
+
     def quit_all():
+        narrator.close()
         holder["p"].stop()
         holder["sp"].stop()
         if holder.get("tray"):
@@ -237,6 +277,13 @@ def run_live() -> None:
         on_partial=lambda en, he: ui.post("partial", en, he),
     )
     holder["p"] = p
+    from . import net
+
+    net.on_blocked = lambda msg: ui.post("notify", msg)
+    p.narrator = narrator
+    ui.narrator = narrator
+    if s.narrate_on_at_start:
+        narrator.set(True)
     print(f"[engine] {'azure (cloud)' if cloud_credentials(s) else 'local'}", flush=True)
     try:
         from .hotkeys import register
@@ -245,6 +292,7 @@ def run_live() -> None:
             s.hotkey: lambda: ui.post("toggle"),
             s.speak_hotkey: lambda: ui.post("speak_toggle"),
             s.window_hotkey: lambda: ui.post("window_toggle"),
+            s.narrate_hotkey: lambda: ui.post("narrate_toggle"),
         })
     except Exception as e:
         print(f"[hotkey] unavailable: {e}", flush=True)  # tray menu still works

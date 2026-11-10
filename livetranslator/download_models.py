@@ -69,11 +69,11 @@ def main() -> None:
     _file(KOKORO + "voices-v1.0.bin", MODELS_DIR / "kokoro" / "voices-v1.0.bin")
     from huggingface_hub import hf_hub_download
 
-    v = s.piper_voice  # e.g. en_US-hfc_female-medium
-    lang, name, quality = v.split("-")
-    base = f"{lang.split('_')[0]}/{lang}/{name}/{quality}/{v}"
-    for ext in (".onnx", ".onnx.json"):
-        hf_hub_download("rhasspy/piper-voices", base + ext, local_dir=str(MODELS_DIR / "piper"))
+    for v in (s.piper_voice, s.hebrew_voice):  # e.g. en_US-hfc_female-medium
+        lang, name, quality = v.split("-")
+        base = f"{lang.split('_')[0]}/{lang}/{name}/{quality}/{v}"
+        for ext in (".onnx", ".onnx.json"):
+            hf_hub_download("rhasspy/piper-voices", base + ext, local_dir=str(MODELS_DIR / "piper"))
     print("Voices: OK")
 
 

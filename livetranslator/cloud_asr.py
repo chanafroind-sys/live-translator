@@ -1,4 +1,4 @@
-"""Fast speech recognition in the cloud (Groq, Whisper large-v3).
+﻿"""Fast speech recognition in the cloud (Groq, Whisper large-v3).
 
 Local Whisper `small` needs ~5 s for 3-4 s of Hebrew on this laptop, slower
 than real time, so continuous speech piles up. Groq runs Whisper large-v3
@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -21,28 +22,6 @@ import wave
 import numpy as np
 
 URL = "https://api.groq.com/openai/v1/audio/transcriptions"
-
-
-def _ssl_context():
-    """Verify certificates with the Windows certificate store.
-
-    Python 3.13+ adds VERIFY_X509_STRICT, which rejects Groq's certificate
-    chain ("Missing Authority Key Identifier"). Windows' own verifier accepts
-    it; verification stays fully on, just without that extra strictness.
-    """
-    import ssl
-
-    try:
-        import truststore
-
-        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    except ImportError:
-        ctx = ssl.create_default_context()
-        ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
-        return ctx
-
-
-_CTX = _ssl_context()
 
 
 def _wav_bytes(audio: np.ndarray, rate: int = 16000) -> bytes:
@@ -64,6 +43,7 @@ class GroqRecognizer:
         self._make_fallback, self._fallback = make_fallback, None
         self.context = ""
         self.failures = 0
+        self.retry_at = 0.0  # after repeated failures, when to try the cloud again
 
     def _local(self, audio: np.ndarray) -> str:
         if self._fallback is None:  # loaded only if the cloud ever fails
@@ -73,7 +53,10 @@ class GroqRecognizer:
 
     def transcribe(self, audio: np.ndarray) -> str:
         if self.failures >= 3:
-            return self._local(audio)
+            if time.time() < self.retry_at:
+                return self._local(audio)
+            self.failures = 2  # one more cloud attempt
+        self.retry_at = getattr(self, "retry_at", 0.0)
         peak = float(np.abs(audio).max()) if len(audio) else 0.0
         if 0 < peak < 0.5:
             audio = audio * (0.7 / peak)
@@ -93,14 +76,13 @@ class GroqRecognizer:
                    f"Content-Type: audio/wav\r\n\r\n".encode())
         body.write(_wav_bytes(audio))
         body.write(f"\r\n--{boundary}--\r\n".encode())
-        req = urllib.request.Request(URL, data=body.getvalue(), headers={
-            "Authorization": f"Bearer {self.key}",
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "User-Agent": "live-translator",
-        })
+        from . import net
+
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout, context=_CTX) as r:
-                data = json.loads(r.read().decode("utf-8"))
+            data = json.loads(net.post(URL, body.getvalue(), {
+                "Authorization": f"Bearer {self.key}",
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+            }, self.timeout).decode("utf-8"))
             kept = []
             for seg in data.get("segments") or []:
                 if seg.get("no_speech_prob", 0) > 0.5 or seg.get("avg_logprob", 0) < -1.0:
@@ -109,6 +91,10 @@ class GroqRecognizer:
                     continue
                 kept.append(seg.get("text", "").strip())
             text = " ".join(kept).strip() if data.get("segments") is not None else data.get("text", "").strip()
+        except net.Blocked as e:
+            net.report_blocked("Groq", e)
+            self.failures, self.retry_at = 3, time.time() + 300  # try the cloud again in 5 min
+            return self._local(audio)
         except urllib.error.HTTPError as e:
             print(f"[asr] Groq HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:200]}", flush=True)
             self.failures += 1 if e.code in (400, 401, 403, 404) else 0
@@ -116,6 +102,7 @@ class GroqRecognizer:
         except Exception as e:  # offline, timeout
             print(f"[asr] Groq: {e}", flush=True)
             self.failures += 1
+            self.retry_at = time.time() + 60
             return self._local(audio)
         self.failures = 0
         from .engines import _HALLUCINATIONS

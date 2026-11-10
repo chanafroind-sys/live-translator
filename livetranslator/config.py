@@ -62,6 +62,13 @@ class Settings:
 
     # Global on/off hotkey (needs the `keyboard` package).
     hotkey: str = "ctrl+alt+t"
+    # Hebrew narration of what they say (Ctrl+Alt+H or the tray menu).
+    narrate_on_at_start: bool = False
+    narrate_hotkey: str = "ctrl+alt+h"
+    hebrew_voice: str = "he_IL-saspeech-medium"
+    # While narrating, other apps (Zoom, browser) play at this share of their volume.
+    duck_volume: float = 0.3
+    narration_volume: float = 1.0
     # Show / hide the subtitles window. While hidden, subtitles are paused
     # (nothing is transcribed) and the app lives as an icon by the clock.
     window_hotkey: str = "ctrl+alt+s"

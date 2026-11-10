@@ -129,8 +129,15 @@ class SubtitleWindow:
     tray = None
     _resume_on_show = False
 
+    narrator = None
+
     def state(self) -> dict:
-        return {"speak": self.speak_enabled, "visible": self.visible, "fast_voice": self.s.tts_engine == "piper"}
+        return {
+            "speak": self.speak_enabled,
+            "visible": self.visible,
+            "fast_voice": self.s.tts_engine == "piper",
+            "narrate": bool(self.narrator and self.narrator.on.is_set()),
+        }
 
     def hide(self) -> None:
         if not self.visible:
@@ -196,6 +203,16 @@ class SubtitleWindow:
                             self.tray.notify("קול: " + ("מהיר" if new == "piper" else "טבעי"))
 
                     threading.Thread(target=switch, daemon=True).start()
+                elif kind == "narrate_toggle" and self.narrator:
+                    on = self.narrator.toggle()
+                    print(f"[narrate] {'ON' if on else 'OFF'}", flush=True)
+                    self._refresh_tray()
+                    if self.tray:
+                        self.tray.notify("הקראה בעברית: " + ("פועלת" if on else "כבויה"))
+                elif kind == "notify":
+                    if self.tray:
+                        self.tray.notify(args[0])
+                    self._set_status(args[0], OFF)
                 elif kind == "window_toggle":
                     self.toggle_visible()
                 elif kind == "quit":

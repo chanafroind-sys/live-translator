@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from collections import deque
@@ -75,15 +76,19 @@ class ClaudeTranslator:
         self.system = SYSTEM.format(src=_NAMES[src], tgt=_NAMES[tgt], glossary=extra, target_rules=rules)
         self.history: deque[str] = deque(maxlen=5)
         self.failures = 0
+        self.retry_at = 0.0
 
     def translate(self, text: str) -> str:
         if not text:
             return ""
         context = "\n".join(self.history)
         self.history.append(text)
-        # After repeated errors (offline, bad key) stop waiting on the network.
+        # After repeated errors (offline, blocked, bad key) stop waiting on
+        # the network for a while, then try again.
         if self.failures >= 3:
-            return self.fallback.translate(text)
+            if time.time() < self.retry_at:
+                return self.fallback.translate(text)
+            self.failures = 2
         from .vocabulary import glossary
 
         terms = glossary()
@@ -102,19 +107,19 @@ class ClaudeTranslator:
             "system": self.system,
             "messages": [{"role": "user", "content": prompt}],
         }
-        req = urllib.request.Request(
-            API_URL,
-            data=json.dumps(body).encode("utf-8"),
-            headers={
+        from . import net
+
+        try:
+            data = json.loads(net.post(API_URL, json.dumps(body).encode("utf-8"), {
                 "content-type": "application/json",
                 "x-api-key": self.key,
                 "anthropic-version": "2026-10-21",
                 "anthropic-beta": "server-side-fallback-2026-07-01",
-            },
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                data = json.loads(r.read().decode("utf-8"))
+            }, self.timeout).decode("utf-8"))
+        except net.Blocked as e:
+            net.report_blocked("Claude", e)
+            self.failures, self.retry_at = 3, time.time() + 300
+            return self.fallback.translate(text)
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:200]
             print(f"[claude] HTTP {e.code}: {detail}", flush=True)
@@ -123,6 +128,7 @@ class ClaudeTranslator:
         except Exception as e:  # offline, timeout
             print(f"[claude] {e}", flush=True)
             self.failures += 1
+            self.retry_at = time.time() + 60
             return self.fallback.translate(text)
 
         self.failures = 0
