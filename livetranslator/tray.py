@@ -34,11 +34,21 @@ class Tray:
             Item("הצג / הסתר כתוביות", lambda: post("window_toggle"), default=True),
             Item("תרגום הדיבור שלי לאנגלית", lambda: post("speak_toggle"), checked=st("speak")),
             Item("קול מהיר (פחות טבעי)", lambda: post("voice_toggle"), checked=st("fast_voice")),
+            Item("מילון מונחים ושמות…", self._open_vocabulary),
             Menu.SEPARATOR,
             Item("יציאה", lambda: post("quit")),
         )
         self.icon = pystray.Icon("live-translator", _image(GREY), "Live Translator", menu)
         threading.Thread(target=self.icon.run, daemon=True, name="tray").start()
+
+    @staticmethod
+    def _open_vocabulary() -> None:
+        import os
+
+        from .vocabulary import FILE, _load
+
+        _load()  # creates vocabulary.txt from the example on first use
+        os.startfile(str(FILE))  # opens in Notepad; saved changes apply at once
 
     def refresh(self) -> None:
         s = self.get_state()

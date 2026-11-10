@@ -30,6 +30,8 @@ class Settings:
     cloud_asr: bool = True
     groq_model: str = "whisper-large-v3"
     claude_translation: bool = True
+    # So Hebrew subtitles address you correctly ("ספרי לי" vs "ספר לי").
+    my_gender: str = "female"
     # Offline translator: "nllb" (much better, 620 MB) or "argos" (130 MB).
     local_translator: str = "nllb"
     # Haiku: chosen by the user for speed on short live phrases.

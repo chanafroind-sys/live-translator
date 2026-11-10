@@ -82,8 +82,9 @@ class GroqRecognizer:
         fields = {"model": self.model, "language": self.language, "response_format": "verbose_json", "temperature": "0"}
         # Whisper's prompt steers spelling: tech words people mix into Hebrew,
         # plus the last thing said for names/context.
-        hint = "Backend, Frontend, Refactor, Redesign, Freelance, AI, Agents. " if self.language == "he" else ""
-        fields["prompt"] = (hint + self.context)[-200:] or " "
+        from .vocabulary import asr_hint
+
+        fields["prompt"] = (asr_hint() + self.context[-150:]) or " "
         boundary = uuid.uuid4().hex
         body = io.BytesIO()
         for k, v in fields.items():

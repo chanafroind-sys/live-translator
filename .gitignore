@@ -5,3 +5,4 @@ models/
 config.json
 livetranslator.log
 e2e.log
+vocabulary.txt

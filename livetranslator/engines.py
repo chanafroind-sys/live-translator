@@ -15,6 +15,12 @@ _HALLUCINATIONS = {
 }
 
 
+def _local_hint() -> str:
+    from .vocabulary import asr_hint
+
+    return asr_hint(300)
+
+
 class Recognizer:
     def __init__(self, model_name: str, cpu_threads: int, language: str = "en"):
         from faster_whisper import WhisperModel
@@ -35,7 +41,7 @@ class Recognizer:
             # at higher temperatures when unsure: measured 23 s on one phrase.
             temperature=0.0,
             condition_on_previous_text=False,
-            initial_prompt=self.context or None,  # keeps names/terms consistent
+            initial_prompt=_local_hint() + self.context or None,  # your terms + recent text
             without_timestamps=True,
         )
         parts = []
@@ -144,7 +150,8 @@ def make_translator(settings, src: str, tgt: str, model_dir: str):
         from .claude_translate import ClaudeTranslator
 
         print(f"[translate] {src}->{tgt}: Claude ({settings.claude_model})", flush=True)
-        return ClaudeTranslator(src, tgt, settings.claude_model, settings.glossary, fallback=local)
+        return ClaudeTranslator(src, tgt, settings.claude_model, settings.glossary, fallback=local,
+                                listener_gender=settings.my_gender)
     print(f"[translate] {src}->{tgt}: local ({type(local).__name__})", flush=True)
     return local
 

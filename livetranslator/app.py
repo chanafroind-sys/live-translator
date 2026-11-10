@@ -82,9 +82,9 @@ class Pipeline:
             self._boot_cloud(*creds)
             return
         try:
-            from .engines import Recognizer, make_translator
+            from .engines import make_recognizer, make_translator
 
-            self.recognizer = Recognizer(self.s.whisper_model, self.s.cpu_threads)
+            self.recognizer = make_recognizer(self.s, self.s.whisper_model, "en")
             self.translator = make_translator(self.s, "en", "he", self.s.translation_model_dir)
         except Exception as e:
             self.on_error(f"שגיאה בטעינת מודלים: {e}")
@@ -154,7 +154,8 @@ class Pipeline:
             if not english:
                 continue
             hebrew = self.translator.translate(english)
-            self.on_line(english, hebrew, time.time() - ended_at)
+            if hebrew:  # "" = filler ("uh", "um"): no subtitle
+                self.on_line(english, hebrew, time.time() - ended_at)
 
 
 def _set_default_mic(name: str) -> bool:
@@ -332,11 +333,11 @@ def run_file(path: str) -> None:
     """Feed a WAV file through the same pipeline in real time and print timings."""
     import wave
 
-    from .engines import Recognizer, make_translator
+    from .engines import make_recognizer, make_translator
 
     s = load_settings()
     a = _read_wav(path)
-    rec = Recognizer(s.whisper_model, s.cpu_threads)
+    rec = make_recognizer(s, s.whisper_model, "en")
     tr = make_translator(s, "en", "he", s.translation_model_dir)
     seg = PhraseSegmenter(s.speech_threshold, s.silence_end_sec, s.max_phrase_sec)
     for i in range(0, len(a) - FRAME, FRAME):

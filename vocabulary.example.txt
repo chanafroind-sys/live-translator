@@ -1,0 +1,38 @@
+# מילון מונחים אישי. שורה לכל מונח. שורות שמתחילות ב-# הן הערות.
+#
+# מונח באנגלית שאת אומרת כמו שהוא:
+#     Kubernetes
+# או: איך שאת אומרת = איך שזה צריך לצאת באנגלית
+#     מטריקס גלובל = Matrix Global
+#
+# השינויים נקלטים מיד, בלי להפעיל מחדש.
+
+Backend
+Frontend
+Full Stack
+Refactor
+Redesign
+Freelance
+Deploy
+Production
+Pull Request
+Code Review
+API
+Database
+Microservices
+Docker
+Kubernetes
+React
+Node.js
+Python
+TypeScript
+AI Agents
+LLM
+Prompt
+Machine Learning
+Product Manager
+UX
+UI
+Sprint
+Scrum
+Startup

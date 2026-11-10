@@ -36,7 +36,17 @@ translation field must contain only words the speaker said: never a comment, \
 a correction of yourself, an alternative, or a note about the input. If the \
 phrase is an unfinished fragment, translate the fragment as is. If it is \
 only a filler sound (uh, um, אה, אממ) or unintelligible, return an empty \
-translation.{glossary}"""
+translation.{glossary}{target_rules}"""
+
+# Hebrew subtitles: the listener is a woman, and the subtitle window can't
+# mix right-to-left and left-to-right text in one line.
+HE_TARGET_RULES = """
+
+The Hebrew is read by {listener}. When the other side speaks to her, use \
+{form} forms (e.g. {example}). Write English technical terms and names the way \
+Israelis write them in Hebrew letters (e.g. דיפלוי, קוברנטיס, מיקרוסרוויסים, \
+קוד ריוויו), never in Latin letters, because the subtitle line cannot mix \
+directions."""
 
 _SCHEMA = {
     "type": "object",
@@ -47,13 +57,22 @@ _SCHEMA = {
 
 
 class ClaudeTranslator:
-    def __init__(self, src: str, tgt: str, model: str, glossary: str, fallback, timeout: float = 8.0):
+    def __init__(self, src: str, tgt: str, model: str, glossary: str, fallback, timeout: float = 8.0,
+                 listener_gender: str = "female"):
         self.key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not self.key:
             raise RuntimeError("ANTHROPIC_API_KEY is not set")
         self.model, self.fallback, self.timeout = model, fallback, timeout
         extra = f"\n\nGlossary (always use these): {glossary}" if glossary.strip() else ""
-        self.system = SYSTEM.format(src=_NAMES[src], tgt=_NAMES[tgt], glossary=extra)
+        rules = ""
+        if tgt == "he":
+            female = listener_gender != "male"
+            rules = HE_TARGET_RULES.format(
+                listener="a woman" if female else "a man",
+                form="feminine" if female else "masculine",
+                example="ספרי לי, את" if female else "ספר לי, אתה",
+            )
+        self.system = SYSTEM.format(src=_NAMES[src], tgt=_NAMES[tgt], glossary=extra, target_rules=rules)
         self.history: deque[str] = deque(maxlen=5)
         self.failures = 0
 
@@ -65,7 +84,14 @@ class ClaudeTranslator:
         # After repeated errors (offline, bad key) stop waiting on the network.
         if self.failures >= 3:
             return self.fallback.translate(text)
-        prompt = (f"Earlier lines (context only):\n{context}\n\n" if context else "") + f"New phrase:\n{text}"
+        from .vocabulary import glossary
+
+        terms = glossary()
+        prompt = (
+            (f"Speaker's own terms (the recognizer may write them in Hebrew letters):\n{terms}\n\n" if terms else "")
+            + (f"Earlier lines (context only):\n{context}\n\n" if context else "")
+            + f"New phrase:\n{text}"
+        )
         body = {
             "model": self.model,
             "max_tokens": 2000,
