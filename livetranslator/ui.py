@@ -94,8 +94,14 @@ class SubtitleWindow:
         self.body.pack(fill="both", expand=True, padx=18, pady=(2, 6))
         self._render()
 
-        for widget in (self.root, self.body, top, self.status, self.hint, self.hotkey_label, row2,
-                       self.speak_status, self.speak_hint, self.speak_hotkey_label, sent, self.sent_label):
+        # The status texts are buttons: click to switch that direction on/off.
+        self.status.configure(cursor="hand2")
+        self.status.bind("<Button-1>", lambda e: self._toggle())
+        self.speak_status.configure(cursor="hand2")
+        self.speak_status.bind("<Button-1>", lambda e: self._toggle_speak())
+
+        for widget in (self.root, self.body, top, self.hint, self.hotkey_label, row2,
+                       self.speak_hint, self.speak_hotkey_label, sent, self.sent_label):
             widget.bind("<ButtonPress-1>", self._start_drag)
             widget.bind("<B1-Motion>", self._drag)
             widget.bind("<Button-3>", self._menu)
@@ -202,6 +208,7 @@ class SubtitleWindow:
     def _toggle_speak(self) -> None:
         if self.on_toggle_speak:
             self.speak_enabled = self.on_toggle_speak()
+            print(f"[speak] translation {'ON' if self.speak_enabled else 'OFF'}", flush=True)
             self._show_speak()
 
     def _show_speak(self) -> None:
@@ -212,7 +219,7 @@ class SubtitleWindow:
             self.speak_status.configure(text=R("● דיבור: מתרגם לאנגלית"), fg=ON)
         else:
             self.speak_status.configure(text=R("● דיבור: כבוי (הקול שלך עובר רגיל)"), fg=MUTED)
-        self.speak_hint.configure(text=R("להשהיה:" if self.speak_enabled else "להפעלה:"))
+        self.speak_hint.configure(text=R("לכיבוי: קליק כאן או" if self.speak_enabled else "להפעלה: קליק כאן או"))
         self.speak_hotkey_label.configure(text=hk)
         # Separate labels: Tk can't mix Hebrew and Latin in one string.
         self.speak_note.configure(text="" if self.speak_virtual else R("מצב בדיקה: אין כבל וירטואלי, האנגלית יוצאת לרמקולים"))
