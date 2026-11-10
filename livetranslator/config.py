@@ -25,6 +25,10 @@ class Settings:
     # Translate with Claude when ANTHROPIC_API_KEY is set (internet). Much
     # better than the local model and fixes speech-recognition slips; falls
     # back to local automatically when offline.
+    # Recognise your Hebrew in the cloud (Groq) when GROQ_API_KEY is set:
+    # ~0.5 s instead of ~5 s, and better Hebrew. Falls back to local.
+    cloud_asr: bool = True
+    groq_model: str = "whisper-large-v3"
     claude_translation: bool = True
     # Offline translator: "nllb" (much better, 620 MB) or "argos" (130 MB).
     local_translator: str = "nllb"
@@ -80,7 +84,8 @@ class Settings:
     mic_device: str = ""
     # How loud your own Hebrew voice is under the translation (0 = silent).
     # When translation is off, your voice passes through at full volume.
-    original_voice_gain: float = 0.15
+    # 0 = while translating, they hear only the English (your Hebrew is muted).
+    original_voice_gain: float = 0.0
     mic_speech_threshold: float = 0.012
     speak_on_at_start: bool = False
     # While the app runs, make "CABLE Output" the Windows default mic so every

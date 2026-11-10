@@ -41,7 +41,9 @@ def find_devices(sc, mic_name: str, out_name: str):
     """Return (real microphone, output speaker, output_is_virtual)."""
     mics = sc.all_microphones()
     mic = None
-    if mic_name:
+    if mic_name.lower() == "loopback":  # testing: "hear" what the speakers play
+        mic = sc.get_microphone(str(sc.default_speaker().name), include_loopback=True)
+    elif mic_name:
         mic = next((m for m in mics if mic_name.lower() in m.name.lower()), None)
     if mic is None:
         default = sc.default_microphone()
@@ -72,6 +74,7 @@ class SpeakPipeline:
         self.seg_frames: "queue.Queue[np.ndarray]" = queue.Queue()
         self.mix_frames: "queue.Queue[np.ndarray]" = queue.Queue(maxsize=50)
         self.phrases: "queue.Queue[tuple[np.ndarray, float]]" = queue.Queue(maxsize=4)
+        self.texts: "queue.Queue[tuple[str, float]]" = queue.Queue()
         self.tts = np.zeros(0, np.float32)  # English audio waiting to be mixed in
         self.tts_lock = threading.Lock()
 
@@ -81,6 +84,9 @@ class SpeakPipeline:
             self.enabled.clear()
             with self.tts_lock:  # stop any English still queued
                 self.tts = np.zeros(0, np.float32)
+            for q in (self.phrases, self.texts):  # and anything not yet spoken
+                while not q.empty():
+                    q.get_nowait()
         else:
             self.enabled.set()
         return self.enabled.is_set()
@@ -149,9 +155,9 @@ class SpeakPipeline:
             self._boot_cloud(*creds)
             return
         try:
-            from .engines import Recognizer, make_translator, make_voice
+            from .engines import make_recognizer, make_translator, make_voice
 
-            self.recognizer = Recognizer(self.s.speak_whisper_model, self.s.cpu_threads, language="he")
+            self.recognizer = make_recognizer(self.s, self.s.speak_whisper_model, "he")
             self.translator = make_translator(self.s, "he", "en", self.s.he_en_model_dir)
             self.voice = make_voice(self.s, self.models_dir)
         except Exception as e:
@@ -160,6 +166,7 @@ class SpeakPipeline:
         self.ready = True
         threading.Thread(target=self._segment_loop, daemon=True, name="speak-seg").start()
         threading.Thread(target=self._work_loop, daemon=True, name="speak-work").start()
+        threading.Thread(target=self._voice_loop, daemon=True, name="speak-voice").start()
 
     def _boot_cloud(self, key: str, region: str) -> None:
         """Azure: streaming he->en translation, then an Azure neural voice."""
@@ -218,7 +225,7 @@ class SpeakPipeline:
                 first = False
 
     def _segment_loop(self) -> None:
-        seg = PhraseSegmenter(self.s.mic_speech_threshold, self.s.silence_end_sec, self.s.max_phrase_sec)
+        seg = PhraseSegmenter(self.s.mic_speech_threshold, self.s.silence_end_sec, self.s.max_phrase_sec, adaptive=True)
         while not self.stopping.is_set():
             try:
                 frame = self.seg_frames.get(timeout=0.2)
@@ -245,8 +252,24 @@ class SpeakPipeline:
             from .app import merge_backlog
 
             audio, ended_at = merge_backlog(self.phrases, audio, ended_at)
+            t0 = time.time()
             hebrew = self.recognizer.transcribe(audio)
-            if not hebrew:
+            print(f"[speak] heard {len(audio) / SAMPLE_RATE:.1f}s (peak {np.abs(audio).max():.3f}), "
+                  f"recognised in {time.time() - t0:.1f}s: {hebrew!r}", flush=True)
+            if hebrew:
+                # Hand off: the next phrase is recognised while this one is
+                # being translated and voiced.
+                self.texts.put((hebrew, ended_at))
+
+    def _voice_loop(self) -> None:
+        while not self.stopping.is_set():
+            try:
+                hebrew, ended_at = self.texts.get(timeout=0.2)
+            except queue.Empty:
                 continue
+            if not self.enabled.is_set():
+                continue
+            t0 = time.time()
             english = self.translator.translate(hebrew)
+            print(f"[speak] translated in {time.time() - t0:.1f}s: {english!r}", flush=True)
             self._queue_voice(hebrew, english, ended_at)

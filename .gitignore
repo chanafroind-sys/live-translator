@@ -4,3 +4,4 @@ __pycache__/
 models/
 config.json
 livetranslator.log
+e2e.log

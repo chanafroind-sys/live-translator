@@ -24,10 +24,16 @@ class Recognizer:
         self.context = ""
 
     def transcribe(self, audio: np.ndarray) -> str:
+        peak = float(np.abs(audio).max()) if len(audio) else 0.0
+        if 0 < peak < 0.5:  # quiet mic: bring speech up to a normal level
+            audio = audio * (0.7 / peak)
         segments, _ = self.model.transcribe(
             audio,
             language=self.language,
             beam_size=1,
+            # One pass only. By default Whisper re-decodes up to 5 more times
+            # at higher temperatures when unsure: measured 23 s on one phrase.
+            temperature=0.0,
             condition_on_previous_text=False,
             initial_prompt=self.context or None,  # keeps names/terms consistent
             without_timestamps=True,
@@ -35,6 +41,7 @@ class Recognizer:
         parts = []
         for s in segments:
             if s.no_speech_prob > 0.6 and s.avg_logprob < -0.8:
+                print(f"[asr] dropped as non-speech: {s.text.strip()!r}", flush=True)
                 continue
             parts.append(s.text.strip())
         text = " ".join(p for p in parts if p).strip()
@@ -46,6 +53,18 @@ class Recognizer:
         if text:
             self.context = text[-200:]
         return text
+
+
+def make_recognizer(settings, model_name: str, language: str):
+    """Groq in the cloud when GROQ_API_KEY is set (fast), else local Whisper."""
+    local = lambda: Recognizer(model_name, settings.cpu_threads, language=language)  # noqa: E731
+    if settings.cloud_asr and os.environ.get("GROQ_API_KEY"):
+        from .cloud_asr import GroqRecognizer
+
+        print(f"[asr] {language}: Groq ({settings.groq_model})", flush=True)
+        return GroqRecognizer(language, settings.groq_model, make_fallback=local)
+    print(f"[asr] {language}: local Whisper {model_name}", flush=True)
+    return local()
 
 
 class Translator:

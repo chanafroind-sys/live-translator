@@ -237,13 +237,15 @@ def run_live() -> None:
     holder["p"] = p
     print(f"[engine] {'azure (cloud)' if cloud_credentials(s) else 'local'}", flush=True)
     try:
-        import keyboard
+        from .hotkeys import register
 
-        keyboard.add_hotkey(s.hotkey, lambda: ui.post("toggle"))
-        keyboard.add_hotkey(s.speak_hotkey, lambda: ui.post("speak_toggle"))
-        keyboard.add_hotkey(s.window_hotkey, lambda: ui.post("window_toggle"))
-    except Exception:
-        pass  # hotkeys are optional; right-click menu still works
+        register({
+            s.hotkey: lambda: ui.post("toggle"),
+            s.speak_hotkey: lambda: ui.post("speak_toggle"),
+            s.window_hotkey: lambda: ui.post("window_toggle"),
+        })
+    except Exception as e:
+        print(f"[hotkey] unavailable: {e}", flush=True)  # tray menu still works
 
     try:
         from .tray import Tray
@@ -271,19 +273,21 @@ def run_live() -> None:
     ui.run()
 
 
-def run_speak_file(path: str, out_path: str) -> None:
+def run_speak_file(path: str, out_path: str, volume: float = 1.0) -> None:
     """Hebrew WAV -> English voice WAV, printing timings per phrase."""
     import wave
 
     from .config import MODELS_DIR
-    from .engines import Recognizer, make_translator, make_voice
+    from .engines import make_recognizer, make_translator, make_voice
 
     s = load_settings()
     a = _read_wav(path)
-    rec = Recognizer(s.speak_whisper_model, s.cpu_threads, language="he")
+    rec = make_recognizer(s, s.speak_whisper_model, "he")
     tr = make_translator(s, "he", "en", s.he_en_model_dir)
     voice = make_voice(s, MODELS_DIR)
-    seg = PhraseSegmenter(s.mic_speech_threshold, s.silence_end_sec, s.max_phrase_sec)
+    seg = PhraseSegmenter(s.mic_speech_threshold, s.silence_end_sec, s.max_phrase_sec, adaptive=True)
+    a = a * volume  # --volume: simulate a quiet microphone
+    a = np.concatenate([np.random.normal(0, 0.0003, SAMPLE_RATE * 2).astype(np.float32), a])  # room noise lead-in
     out = []
     for i in range(0, len(a) - FRAME, FRAME):
         phrase = seg.push(a[i:i + FRAME])
@@ -358,9 +362,10 @@ def main() -> None:
     ap.add_argument("--file", help="test subtitles on an English WAV file instead of live audio")
     ap.add_argument("--speak-file", help="test the speaking direction on a Hebrew WAV file")
     ap.add_argument("--out", default="english_voice.wav", help="where --speak-file saves the English voice")
+    ap.add_argument("--volume", type=float, default=1.0, help="scale --speak-file audio (e.g. 0.02 = very quiet mic)")
     args = ap.parse_args()
     if args.speak_file:
-        run_speak_file(args.speak_file, args.out)
+        run_speak_file(args.speak_file, args.out, args.volume)
     elif args.file:
         run_file(args.file)
     else:

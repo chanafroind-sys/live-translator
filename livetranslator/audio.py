@@ -54,8 +54,13 @@ class LoopbackCapture(threading.Thread):
 class PhraseSegmenter:
     """Groups 30 ms frames into phrases using loudness + silence timing."""
 
-    def __init__(self, threshold: float, silence_end_sec: float, max_phrase_sec: float):
+    def __init__(self, threshold: float, silence_end_sec: float, max_phrase_sec: float, adaptive: bool = False):
         self.threshold = threshold
+        # Adaptive mode (microphones): speech = clearly above the room's own
+        # noise floor. Laptop mics vary a lot; this one idles at RMS 0.0003,
+        # where a fixed 0.012 threshold missed most normal speech.
+        self.adaptive = adaptive
+        self.floor = threshold / 8
         self.silence_frames = int(silence_end_sec * SAMPLE_RATE / FRAME)
         self.max_frames = int(max_phrase_sec * SAMPLE_RATE / FRAME)
         self.preroll: deque[np.ndarray] = deque(maxlen=10)  # 300 ms before speech
@@ -66,7 +71,16 @@ class PhraseSegmenter:
     def push(self, frame: np.ndarray) -> np.ndarray | None:
         """Add a frame; return a finished phrase or None."""
         self.last_frame_time = time.time()
-        loud = float(np.sqrt(np.mean(frame * frame))) > self.threshold
+        rms = float(np.sqrt(np.mean(frame * frame)))
+        if self.adaptive:
+            limit = max(0.001, min(self.threshold, self.floor * 4))
+            if self.frames:  # inside a phrase: softer word endings still count
+                limit *= 0.6
+            loud = rms > limit
+            if not loud:  # learn the noise floor from quiet frames only
+                self.floor = 0.98 * self.floor + 0.02 * max(rms, 1e-5)
+        else:
+            loud = rms > self.threshold
         if not self.frames:
             if loud:
                 self.frames = list(self.preroll) + [frame]

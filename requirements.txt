@@ -9,3 +9,4 @@ kokoro-onnx>=0.4
 azure-cognitiveservices-speech>=1.40
 pystray>=0.19
 pillow>=10
+truststore>=0.9
