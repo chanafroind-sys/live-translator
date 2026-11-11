@@ -7,7 +7,9 @@ if not exist ".venv\Scripts\python.exe" (
     ".venv\Scripts\python.exe" -m pip install -r requirements.txt || goto :error
     ".venv\Scripts\python.exe" -m livetranslator.download_models || goto :error
 )
-start "" ".venv\Scripts\pythonw.exe" -W ignore -m livetranslator
+rem The guard starts the app and, however it ends (even a crash), puts the
+rem real microphone and app volumes back.
+start "" ".venv\Scripts\pythonw.exe" -W ignore -m livetranslator.guard run
 exit /b 0
 
 :error
