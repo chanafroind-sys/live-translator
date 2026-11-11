@@ -1,287 +1,173 @@
-﻿# Live Translator: תרגום חי מקומי
+<div align="center">
 
-מתרגם בשני הכיוונים, והכול רץ **על המחשב שלך**, בלי אינטרנט, בלי שרת ובלי תשלום:
+# 🎙️ Live Translator
 
-- **כתוביות:** כל דבר באנגלית שמתנגן במחשב (זום, Meet, Teams, סרטון, שיעור מוקלט) מקבל כתוביות בעברית.
-- **דיבור:** את מדברת בעברית, והצד השני שומע את התרגום באנגלית בקול נשי טבעי. הקול שלך נשמע ברקע בעוצמה נמוכה.
+### Real-time, two-way Hebrew ⇄ English voice translation for any app on Windows
 
-לכל כיוון יש מתג וקיצור מקלדת נפרדים.
+Speak Hebrew, and the other side hears natural English. They speak English, and you read and hear Hebrew.<br>
+It works in Zoom, Google Meet, Teams, the browser, or a recorded lecture, with **no plugins and no app changes**.
 
-> English summary: local, offline, two-way live translation on Windows. English audio from any app → Hebrew subtitles; your Hebrew mic → natural English voice on a virtual microphone. Whisper + NLLB-200 (CTranslate2) or Claude for translation + Kokoro/Piper TTS; optional Azure cloud mode.
+![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)
+![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=windows&logoColor=white)
+![Claude](https://img.shields.io/badge/Claude-Haiku_5.5-D97757)
+![Whisper](https://img.shields.io/badge/Whisper-large--v3_on_Groq-F55036)
+![Latency](https://img.shields.io/badge/end--to--end-~1.2_s-22C55E)
+![Offline fallback](https://img.shields.io/badge/offline-fallback-64748B)
 
-## התקנה והפעלה
+<img src="docs/images/hero.svg" alt="Hebrew speech goes through Live Translator and reaches the call as English; English speech comes back as Hebrew subtitles and narration" width="900">
 
-צריך Windows 10/11 ו-Python 3.12 ומעלה.
+</div>
 
-1. לחיצה כפולה על **`start.bat`**. בפעם הראשונה ההתקנה לוקחת כמה דקות: מתקינה ספריות ומורידה מודלים (בערך 1.5GB).
-2. בשביל כיוון הדיבור צריך גם **VB-CABLE**, מיקרופון וירטואלי חינמי:
-   - מורידים מ-[vb-audio.com/Cable](https://vb-audio.com/Cable/). מגיע קובץ ZIP: לחיצה ימנית ← "חלץ הכול".
-   - בתיקייה שנוצרה: לחיצה ימנית על `VBCABLE_Setup_x64.exe` ← "הפעל כמנהל" ← **Install Driver**. אחר כך מפעילים מחדש את המחשב.
-   - אחרי ההתקנה בודקים ב**הגדרות ← מערכת ← קול** שהרמקולים (פלט) עדיין **Speakers (Realtek)**. לפעמים ההתקנה מעבירה את הפלט ל-CABLE, ואז לא שומעים כלום.
-   - בלי VB-CABLE התוכנה עובדת **במצב בדיקה**: האנגלית יוצאת לרמקולים שלך, כדי שתוכלי לשמוע איך זה נשמע.
+---
 
-### למה צריך מיקרופון וירטואלי
+## ✨ What it does
 
-התוכנה לא יכולה לשנות את מה שהמיקרופון האמיתי שולח לתוכנות אחרות. היא **מקשיבה** למיקרופון האמיתי, ו**משמיעה** את האנגלית לתוך "כבל":
+| | Feature | How it feels |
+|---|---|---|
+| 🗣️ | **Speak Hebrew → they hear English** | A natural English voice goes into any call through a virtual microphone. Your own Hebrew is muted. |
+| 📝 | **They speak English → Hebrew subtitles** | An always-on-top subtitle window, plus optional **Hebrew narration**, with the call turned down to 30% underneath. |
+| ✍️ | **Polish mode** | Turns hesitant speech ("um… I worked on, on backend stuff…") into clean, professional English. It never adds facts. |
+| 💡 | **Term explanations** | After a line is translated, hard jargon gets a short Hebrew explanation, based on what *you* already know. |
+| 📚 | **Personal vocabulary** | Your names, companies and tech terms are recognized and translated exactly as you want. |
+| 🔒 | **Graceful by design** | Runs in the system tray. If the cloud is unreachable it works fully offline, and it never leaves you with a silent mic. |
 
-```
-המיקרופון האמיתי ──► Live Translator ──► CABLE Input ═══ CABLE Output ──► זום / Meet / כל תוכנה
-```
+Every feature has its own global hotkey (`Ctrl+Alt+Y / P / H / E / S`) and a checkbox in the tray menu.
 
-`CABLE Output` הוא "המיקרופון" שבקצה השני של הכבל. יש שתי דרכים לחבר אותו:
+---
 
-- **רק בתוכנה מסוימת:** בהגדרות השמע של זום, Meet וכו' בוחרים כמיקרופון את `CABLE Output`.
-- **בכל התוכנות בבת אחת:** ב**הגדרות ← מערכת ← קול ← קלט** בוחרים את `CABLE Output` כמיקרופון ברירת המחדל. כך כל תוכנה שמשתמשת במיקרופון ברירת המחדל, גם כזו שלא נותנת לבחור, מקבלת את מה שהתוכנה משמיעה. התוכנה עצמה ממשיכה להקליט מהמיקרופון האמיתי: היא מזהה את הכבל ומדלגת עליו.
+## ⚡ Performance: measured, not guessed
 
-**אוטומטי:** כשהתוכנה נפתחת היא מגדירה בעצמה את `CABLE Output` כמיקרופון ברירת המחדל, וכשיוצאים ממנה (קליק ימני על האייקון ← יציאה) היא מחזירה את המיקרופון הקודם (`auto_default_mic`). אם התוכנה קרסה, `CABLE Output` נשאר שקט: מפעילים אותה שוב וסוגרים, או מריצים `tools\set_default_audio.ps1 -Recording "Microphone Array"`.
+Every number below was measured **end to end through the real virtual audio cable**. A test plays speech, records exactly what Zoom would receive, and transcribes it back ([`tools/e2e_speak_test.py`](tools/e2e_speak_test.py), [`tools/e2e_narrate_test.py`](tools/e2e_narrate_test.py)).
 
-## שימוש
+| Stage of the project | Hebrew → English voice | English → Hebrew subtitle |
+|---|:---:|:---:|
+| v1: fully local (Whisper + NLLB, CPU only) | 11–17 s ⚠️ backlog grew | 1–2 s |
+| + Groq Whisper large-v3 + Claude Haiku | 1.4–2.9 s | 1.8–2.1 s |
+| **+ streaming, kept-alive connections, no JSON schema** | **1.2–2.0 s** | **1.1–1.5 s** |
 
-התוכנה רצה **ברקע**, כאייקון עגול ליד השעון (אם הוא לא מופיע, הוא נמצא בחץ ^ ליד השעון). חלון הכתוביות מופיע רק כשמבקשים אותו.
+**Where the last second went:**
 
-| פעולה | איך |
+| Change | Saved |
 |---|---|
-| דיבור לאנגלית: הפעלה / כיבוי | `Ctrl + Alt + Y`, או קליק ימני על האייקון. מופיעה הודעה קטנה עם המצב |
-| הצגה / הסתרה של חלון הכתוביות | `Ctrl + Alt + S`, או לחיצה על האייקון |
-| כתוביות: השהיה / המשך (כשהחלון פתוח) | `Ctrl + Alt + T` |
-| הזזת החלון | גרירה |
-| גודל טקסט, הסתרת האנגלית | קליק ימני על החלון |
-| הסתרת החלון | ✕ (התוכנה ממשיכה לרוץ) |
-| יציאה מהתוכנה | קליק ימני על האייקון ← "יציאה" |
+| Plain-text output instead of a JSON schema (with a safe output guard) | **−0.55 s** per line |
+| SSE streaming: the voice starts on the **first clause**, not the full sentence | −0.3 s on long lines |
+| One kept-alive HTTPS connection per service | −0.1 to 0.3 s |
+| Whisper single-pass decoding (no temperature fallback) | worst case 23 s → 0.3 s |
 
-**צבע האייקון:** ירוק = הדיבור שלך מתורגם לאנגלית · כחול = חלון הכתוביות פתוח · אפור = רגיל, הקול שלך עובר בלי שינוי.
+A real sample from the test, Hebrew mixed with English tech terms the way Israelis actually talk:
 
-**כשהחלון מוסתר הכתוביות מושהות:** שום דבר לא מתומלל, ולא נצרך מעבד על כך.
+| Said (Hebrew) | The other side heard |
+|---|---|
+| עשיתי ריפקטור לכל הבקאנד | *I did a refactor of the entire backend.* |
+| העברתי את המיקרוסרוויסים לקוברנטיס | *I moved the microservices to Kubernetes.* |
+| היום אני בונה AI Agents עם LLM | *Today I'm building AI Agents with an LLM.* |
 
-- **כשהדיבור כבוי**, הקול שלך עובר דרך `CABLE Output` רגיל, בלי תרגום. כך המיקרופון בזום תמיד עובד.
-- **כשהוא דולק**, הצד השני שומע **רק את האנגלית**. הקול שלך מושתק. אם רוצים שישמעו גם אותך בשקט ברקע, מגדירים `original_voice_gain`, למשל `0.15`.
-- בתחתית החלון מופיע **מה שהצד השני שמע ממך** באנגלית, כדי שתדעי מה נאמר.
-- כברירת מחדל הדיבור **כבוי** כשהתוכנה נפתחת (`speak_on_at_start`).
+---
 
-## ביצועים (i5-12450H, ‏16GB, בלי כרטיס מסך)
+## 🏗️ Architecture
 
-| | כתוביות (אנגלית ← עברית) | דיבור (עברית ← אנגלית) |
-|---|---|---|
-| עיכוב מסוף משפט | בערך 1.5 שניות | 5–7 שניות (ראו הערה) |
-| זיהוי דיבור | Whisper `base.en`: ‏0.8–2 שניות | Whisper `small` בעברית: 1.6–8 שניות |
-| תרגום (NLLB) | 0.3–0.6 שנייה | 0.5–0.6 שנייה |
-| קול | אין | Kokoro: ‏0.8–3.6 שניות למשפט |
-| זיכרון | | בערך 2GB בסך הכול |
+```mermaid
+flowchart LR
+    subgraph OUT["🗣️ You → them"]
+        MIC["Real microphone"] --> VAD1["Adaptive VAD<br/>(learns noise floor)"]
+        VAD1 --> ASR1["Whisper large-v3<br/>Groq · ~0.3 s"]
+        ASR1 --> LLM1["Claude Haiku<br/>streamed · per clause"]
+        LLM1 --> TTS1["Piper / Kokoro<br/>English voice"]
+        TTS1 --> MIX["Mixer"]
+        MIC -. "pass-through when off" .-> MIX
+        MIX --> CABLE["VB-CABLE<br/>virtual mic"] --> APPS["Zoom · Meet · Teams"]
+    end
 
-**חשוב לגבי מהירות:** במחשב הזה המעבד מאט את עצמו לבערך 43% מהמהירות שלו אחרי פחות משנייה של עבודה (נמדד). כדאי:
-- **הגדרות ← מערכת ← חשמל וסוללה ← מצב צריכת חשמל ← "הביצועים הטובים ביותר"**,
-- לעבוד מחוברת לחשמל,
-- לבדוק אם ליצרן המחשב יש תוכנה עם מצב "Performance".
-
-זה יכול להאיץ את הדיבור פי 2 בערך.
-
-## איכות התרגום
-
-| מתרגם | מתי | איכות |
-|---|---|---|
-| **NLLB-200** (מקומי, ברירת המחדל) | תמיד, גם בלי אינטרנט | טובה. "זה דולק" ← "It's on" · ‏0.3–0.6 שניות למשפט |
-| **Claude** (ענן) | כשמוגדר `ANTHROPIC_API_KEY` ויש אינטרנט | הכי טובה: מבין הקשר, מתקן טעויות זיהוי, שומר על שמות ומונחים |
-
-**הפעלת התרגום עם Claude:** מריצים פעם אחת ב-PowerShell, עם המפתח שלך מ-[console.anthropic.com](https://console.anthropic.com), ואז מפעילים את התוכנה מחדש:
-
-```powershell
-setx ANTHROPIC_API_KEY "המפתח-שלך"
+    subgraph IN["👂 Them → you"]
+        PL["Process-loopback capture<br/>all apps <b>except itself</b>"] --> VAD2["VAD"]
+        VAD2 --> ASR2["Whisper large-v3"]
+        ASR2 --> LLM2["Claude Haiku"]
+        LLM2 --> SUB["Subtitle window"]
+        LLM2 --> NAR["Hebrew narration<br/>(other apps ducked)"]
+        LLM2 --> EXP["💡 Term explainer<br/>(separate, later call)"]
+    end
 ```
 
-- אם אין אינטרנט, או שהמפתח שגוי, התוכנה חוזרת אוטומטית לתרגום מקומי.
-- אפשר להוסיף ב-`config.json` מילון אישי, לדוגמה: `"glossary": "Deel = Deel; מנהלת מוצר = product manager"`.
-- המודל נקבע ב-`claude_model`. ברירת המחדל היא `claude-haiku-5-5`, המהיר (0.8–1.5 שניות). `claude-opus-5-5` מדויק יותר ומתקן טוב יותר טעויות זיהוי, אבל לוקח 1.7–2.8 שניות.
+Each stage runs on its own thread with bounded queues. If recognition falls behind, queued phrases are merged into one pass so the delay can't snowball. Every cloud stage has a local fallback: **faster-whisper**, **NLLB-200** (CTranslate2, int8) and **Piper**.
 
-**כשהתוכנה מפגרת**, למשל כשהמחשב עמוס, משפטים שהצטברו מזוהים יחד בפעם אחת. כך העיכוב לא הולך וגדל.
+---
 
-## מהירות: מה נמדד
+## 🧠 Engineering highlights
 
-נמדד מקצה לקצה דרך הכבל (`tools\e2e_speak_test.py`): הזמן מסוף המשפט שלך עד שהצד השני מתחיל לשמוע אנגלית.
+Real problems found on a real machine, and how they were solved:
 
-| הגדרה | עיכוב |
+| Problem | Solution |
 |---|---|
-| זיהוי מקומי + Claude Opus + קול טבעי | 11–17 שניות, ועוד מצטבר בדיבור רציף |
-| Groq + Claude Haiku + קול טבעי (Kokoro) | 4.5–6 שניות |
-| Groq + Claude Haiku + קול מהיר (Piper) | 1.4–2.9 שניות |
-| **+ חיבור פתוח, סטרימינג, בלי פורמט JSON**, ברירת המחדל | **1.2–2.0 שניות** (כתוביות: 1.1–1.5) |
+| **The app heard its own Hebrew narration** and translated it back ("שלום → Hello → שלום…") | Windows 11 **process-loopback** capture (`ActivateAudioInterfaceAsync`, exclude own process tree), implemented with raw COM in Python. Measured leakage: 0.0003, which is the noise floor. |
+| **Windows Smart App Control** blocked unsigned DLLs (`sentencepiece`, and `jiter` inside the Anthropic SDK) | Wrote a pure-Python **SentencePiece protobuf parser** that rebuilds the tokenizer with HF `tokenizers`, and called the Claude API over raw HTTP/SSE. No policy was bypassed. |
+| **Global hotkeys silently died** under CPU load (Windows drops slow low-level hooks) | Switched from a keyboard hook to Win32 `RegisterHotKey`. |
+| **The laptop mic is very quiet** (idle RMS 0.0003) and a fixed VAD threshold missed most speech | **Adaptive VAD** that tracks the room's noise floor, with hysteresis inside phrases. |
+| **The model "thought aloud"** into the live voice ("Wait, let me correct that…") | Per-clause **output guard**: first line only, meta-phrase detection, and English words that weren't spoken are rejected. |
+| **A network content filter** (Netspark) intercepted TLS and returned HTML block pages | Trust the Windows certificate store (`truststore`), detect block pages, notify the user once, fall back to local, retry every 5 minutes. |
+| **Native libraries failed on a Hebrew Windows username** (`C:\Users\פרוינד`) | Pass 8.3 short paths to espeak-ng, and feed Kokoro phonemes directly. |
+| **A crash could leave Windows with a silent mic** (default = virtual cable) | A **guard process** restores the real mic and app volumes however the app ends, plus a sign-in check. |
+| **Narration needs Zoom quieter, but never left quiet** | Per-app volume ducking with originals **persisted to disk before** lowering, restored on exit, crash or next start. |
 
-מחליפים בין הקולות בקליק ימני על האייקון ← **"קול מהיר (פחות טבעי)"**.
+---
 
-### מה עשה את ההבדל (נמדד)
+## 🧰 Tech stack
 
-- **בלי פורמט JSON קבוע ב-Claude:** חוסך בערך 0.5 שנייה (1.38 ← 0.83 שניות). ההגנה מפני הערות של Claude נשארה: קוראים רק את השורה הראשונה של התשובה.
-- **סטרימינג:** הקול מתחיל במשפט-המשנה הראשון ברגע ש-Claude כותב אותו (0.8–1.1 שניות), בלי לחכות לסוף.
-- **חיבור שנשאר פתוח** ל-Claude ול-Groq, במקום לפתוח חיבור חדש לכל משפט.
-- **סוף משפט** מזוהה אחרי 0.4 שניות שקט במקום 0.5 (`silence_end_sec`).
-- **מה נבדק ולא עזר:** Whisper turbo ב-Groq מהיר יותר רק ב-0.04 שנייה, ובבדיקה השמיט מילים. נשארנו עם large-v3 (בערך 0.27 שנייה).
+**Speech:** Whisper large-v3 (Groq) · faster-whisper (local)<br>
+**Translation:** Claude Haiku 5.5 (streaming, context-aware, glossary) · NLLB-200 600M via CTranslate2 (local)<br>
+**Voice:** Piper (English & Hebrew) · Kokoro-82M (ONNX)<br>
+**Audio:** WASAPI process loopback · VB-CABLE · soundcard · pycaw<br>
+**App:** Python 3.14 · Tkinter (RTL subtitle overlay) · pystray · Win32 via ctypes/comtypes
 
-## ניסוח משופר של מה שאת אומרת
+---
 
-**מפעילים:** `Ctrl + Alt + P`, או קליק ימני על האייקון ← **"ניסוח משופר של מה שאני אומרת"**.
-
-במצב הזה Claude לא מתרגם מילה במילה. הוא מנסח את מה שאמרת באנגלית שוטפת ומקצועית: בלי "אממ", בלי התחלות שבורות ובלי חזרות. התוכן נשאר בדיוק שלך: הוא לא מוסיף עובדות, מספרים, דוגמאות או טענות, ולא גורם לך להישמע בטוחה או מנוסה יותר ממה שנשמעת.
-
-| אמרת | תרגום רגיל | ניסוח משופר |
-|---|---|---|
-| אני בעצם, אממ, עבדתי שם על, על הרבה דברים של בקאנד, ככה, ושל דאטה | I actually worked there on a lot of backend things, like, and data. | I actually worked on a lot of backend things there, and on data. |
-
-אותה מהירות כמו תרגום רגיל: נמדד 0.77 שנייה עם ניסוח משופר, לעומת 0.84 בלעדיו. דורש Claude. בלי Claude מופיעה הודעה, והתרגום נשאר רגיל.
-
-## הסברים למונחים קשים
-
-**מפעילים:** `Ctrl + Alt + E`, או קליק ימני על האייקון ← **"הסברים למונחים קשים"**.
-
-אחרי שמשפט שלהם תורגם (ובקריאה, אחרי שהוקרא), Claude בודק אם היו בו מונחים שכנראה לא מוכרים לך, ומוסיף הסבר קצר בעברית:
-
-> **הם:** *How would you handle eventual consistency across services with an outbox pattern?*
-> 💡 **אבנטשואל קונסיסטנסי:** עקביות שתגיע בסופו של דבר: הנתונים בין השירותים מתיישרים עם הזמן, לא מיד.
-> 💡 **אאוטבוקס פאטרן:** דפוס שבו ההודעה נשמרת בטבלה באותו מסד נתונים כמו השינוי, ונשלחת משם בהמשך.
-
-- **לא מעכב את התרגום:** ההסבר הוא בקשה נפרדת שיוצאת רק אחרי שהתרגום כבר הוצג. הוא מגיע 1.3–1.7 שניות אחריו.
-- **בהקראה:** תרגום תמיד מוקרא לפני הסבר. אם הם ממשיכים לדבר, הסבר שעבר יותר מ-8 שניות מדולג.
-- **מותאם אלייך:** קליק ימני ← **"מה אני יודעת (בשביל ההסברים)…"** פותח את `about_me.txt`. כותבים שם מה את מכירה טוב ומה פחות. הקובץ נשאר רק במחשב.
-- **רק משמעות של מילים:** ההסבר לא מציע מה לענות. משפט בלי מונחים קשים ("Thanks, that sounds great") לא מקבל הסבר.
-
-## הקראה בעברית של מה שהם אומרים
-
-**מפעילים:** `Ctrl + Alt + H`, או קליק ימני על האייקון ← **"הקראה בעברית של מה שהם אומרים"**.
-
-- כל משפט שהם אומרים באנגלית מוקרא לך בעברית, כשנייה אחרי הכתובית.
-- **כל שאר האפליקציות** (זום, כרום) יורדות ל-30% מהעוצמה שלהן (`duck_volume`), כך שאת שומעת אותם חלש ואת התרגום חזק.
-- כשמכבים את ההקראה או יוצאים מהתוכנה, העוצמות חוזרות למה שהיו. גם אם התוכנה קורסת, העוצמות המקוריות שמורות בקובץ ומוחזרות בהפעלה הבאה.
-- ההקראה עובדת גם כשחלון הכתוביות סגור.
-- הקול העברי הוא Piper `saspeech`, קול גברי ברור. זה הקול העברי הטבעי היחיד שרץ מקומית.
-
-**איך זה לא מתרגם את עצמו:** התוכנה מקליטה "את כל מה שהמחשב משמיע **חוץ ממנה**" (Windows 11, process loopback). כך היא שומעת את זום ולא את ההקראה, ולא מפספסת משפטים שנאמרים בזמן ההקראה. נמדד: דליפה של 0.0003, כלומר רמת רעש.
-
-## אם הענן לא עובד: סינון אינטרנט
-
-אם ברשת שלך יש סינון (למשל אתרוג או Netspark), הוא עלול לחסום את `api.anthropic.com` ואת `api.groq.com`. במקרה כזה:
-
-- התוכנה מזהה את דף החסימה, מודיעה פעם אחת ("סינון האינטרנט חוסם את…") ועוברת לעבודה מקומית, איטית יותר.
-- כל 5 דקות היא מנסה שוב את הענן.
-- כדי שהענן יעבוד, צריך לבקש מספק הסינון לאשר את שתי הכתובות.
-
-## מילון מונחים ושמות
-
-הרבה מדברים עברית עם מונחים באנגלית ("עשיתי דיפלוי לפרודקשן"). כדי שהזיהוי והתרגום יקלטו אותם נכון, יש קובץ מונחים אישי:
-
-- **פותחים אותו:** קליק ימני על האייקון ← **"מילון מונחים ושמות…"**. הוא נפתח ב-Notepad.
-- **שורה לכל מונח**, בשתי צורות:
-  - `Kubernetes`: מונח באנגלית שאומרים כמו שהוא.
-  - `מטריקס גלובל = Matrix Global`: איך שאומרים = איך שזה צריך לצאת באנגלית. מתאים במיוחד לשמות של אנשים וחברות.
-- **השינויים נקלטים מיד**, בלי להפעיל את התוכנה מחדש.
-- הקובץ (`vocabulary.txt`) נשאר רק במחשב שלך ולא עולה ל-GitHub.
-
-המונחים עוזרים פעמיים: Whisper מקבל אותם כרמז לאיות, ו-Claude מקבל אותם כמילון לתרגום.
-
-נבדק על "עשיתי ריפקטור לכל הבקאנד, העברתי את המיקרוסרוויסים לקוברנטיס... אני בונה איי איי אייג'נטס עם אל אל אמים". יצא: *"I did a refactor on the entire backend. I moved the Microservices to Kubernetes... Today I'm building AI Agents with an LLM."*
-
-**בכתוביות בעברית** מונחים באנגלית נכתבים באותיות עבריות (דיפלוי, קוברנטיס), כי חלון הכתוביות לא יודע לערבב בשורה אחת עברית ואנגלית. הפנייה אלייך היא בלשון נקבה ("ספרי לי"). אפשר לשנות את זה ב-`my_gender`.
-
-## זיהוי דיבור מהיר בענן (Groq): ממליץ
-
-רוב העיכוב בכיוון הדיבור הוא זיהוי העברית. מקומית זה לוקח בערך 5 שניות על כל 3–4 שניות דיבור, כלומר **לאט יותר מקצב הדיבור**, ולכן בדיבור רציף העיכוב מצטבר. ב-Groq רץ Whisper large-v3, שמזהה עברית טוב יותר, בפחות משנייה.
-
-1. נרשמים ב-[console.groq.com](https://console.groq.com) (יש מסלול חינמי) ← **API Keys** ← **Create API Key**.
-2. מריצים פעם אחת ב-PowerShell ומפעילים את התוכנה מחדש:
-   ```powershell
-   setx GROQ_API_KEY "המפתח-שלך"
-   ```
-
-- Groq משמש **בשני הכיוונים**: לזיהוי העברית שלך ולזיהוי האנגלית שלהם בכתוביות (0.4 שנייה במקום בערך 1.2).
-- בלי אינטרנט, או אם יש שגיאה, התוכנה חוזרת לבד לזיהוי המקומי.
-- נשלחים רק משפטים שיש בהם דיבור, ורק כשתרגום הדיבור דולק.
-
-## מצב ענן (Azure): מהיר בהרבה
-
-| | מקומי | ענן (Azure) |
-|---|---|---|
-| עיכוב בדיבור | 4–9 שניות | 1–2 שניות בערך (הערכה, עוד לא נמדד כאן) |
-| כתוביות | מופיעות בסוף משפט | מתעדכנות תוך כדי דיבור |
-| קול אנגלי | Kokoro | `en-US-AvaMultilingualNeural`, נשי וטבעי מאוד |
-| אינטרנט | לא צריך | צריך |
-| עלות | חינם | 5 שעות אודיו בחודש חינם, ואחר כך תשלום לפי שימוש |
-| פרטיות | הכול נשאר במחשב | האודיו נשלח ל-Microsoft |
-
-הקול נשלח **רק כשמישהו מדבר** (ועוד שנייה וחצי אחרי), ולא כשכיוון מסוים כבוי. כך לא משלמים על שקט.
-
-**הגדרה, פעם אחת:**
-1. נרשמים ל-[Azure](https://azure.microsoft.com/free) (יש מסלול חינמי), ויוצרים משאב **Speech** בפורטל. אזור מומלץ: `westeurope`.
-2. מעתיקים את **KEY 1** ואת **Location/Region**.
-3. שומרים אותם כמשתני סביבה (פעם אחת, בחלון PowerShell):
-   ```powershell
-   setx AZURE_SPEECH_KEY "המפתח-שלך"
-   setx AZURE_SPEECH_REGION "westeurope"
-   ```
-4. מעבירים בין מקומי לענן בקליק ימני ← **"עבור למנוע"**. התוכנה נפתחת מחדש, ושורת הסטטוס מציינת "(ענן)" או "(מקומי)".
-
-אם נבחר ענן ואין מפתח, התוכנה מודיעה על כך ועובדת מקומית.
-
-## הקול באנגלית
-
-יש שני קולות נשיים: **Piper**, מהיר (ברירת המחדל), ו-**Kokoro** עם הקול `af_heart`, טבעי יותר, קול נשי אמריקאי טבעי. אפשר להחליף ב-`config.json`:
-
-| `kokoro_voice` | תיאור |
-|---|---|
-| `af_heart` | נשי, אמריקאי, חם (ברירת מחדל) |
-| `af_bella` | נשי, אמריקאי |
-| `af_sarah` | נשי, אמריקאי |
-| `af_nicole` | נשי, אמריקאי, רך ושקט |
-| `bf_emma` | נשי, בריטי |
-
-דוגמאות להאזנה נמצאות בתיקייה `samples\voice_kokoro_*.wav`. אם המחשב איטי מדי, אפשר להגדיר `"tts_engine": "piper"`: קול נשי קל ומהיר יותר, אבל פחות טבעי.
-
-## הגדרות
-
-מעתיקים את `config.example.json` ל-`config.json` ומשנים מה שרוצים. ההגדרות העיקריות:
-
-| הגדרה | ברירת מחדל | הסבר |
-|---|---|---|
-| `engine` | `local` | `local` או `azure` |
-| `azure_voice` | `en-US-AvaMultilingualNeural` | הקול האנגלי במצב ענן. אפשר גם `en-US-JennyNeural` או `en-US-AriaNeural` |
-| `whisper_model` | `base.en` | זיהוי האנגלית. ‏`small.en` מדויק יותר אבל איטי יותר |
-| `speak_whisper_model` | `small` | זיהוי העברית. ‏`base` לא מספיק טוב לעברית |
-| `original_voice_gain` | `0.15` | עוצמת הקול שלך מתחת לתרגום (0 = בלי) |
-| `speak_output_device` | `CABLE Input` | לאן יוצאת האנגלית |
-| `mic_device` | ריק | שם המיקרופון האמיתי. ריק = ברירת המחדל של Windows, בלי כבלים וירטואליים |
-| `mic_speech_threshold` | `0.012` | להעלות אם רעשי רקע נקלטים כדיבור |
-| `silence_end_sec` | `0.5` | כמה שקט מסמן סוף משפט |
-| `hotkey` / `speak_hotkey` | `ctrl+alt+t` / `ctrl+alt+y` | קיצורי המקלדת |
-
-## בדיקה מקצה לקצה
+## 🚀 Quick start
 
 ```bash
-.venv\Scripts\python tools\e2e_speak_test.py samples\hebrew_test.wav
+git clone https://github.com/chanafroind-sys/live-translator.git
 ```
 
-הבדיקה מפעילה את התוכנה כך שהיא "שומעת" את הרמקולים במקום את המיקרופון, משמיעה הקלטה בעברית, מקליטה את `CABLE Output` (בדיוק מה שזום היה מקבל) ומתמללת את מה שיצא.
+1. Double-click **`start.bat`**. The first run installs everything and downloads the local models.
+2. Install **[VB-CABLE](https://vb-audio.com/Cable/)** (a free virtual microphone).
+3. Optional, for the fast cloud path: set `ANTHROPIC_API_KEY` and `GROQ_API_KEY`. Without them, everything runs offline.
 
-## בדיקה על קבצים
+| Hotkey | Action |
+|---|---|
+| `Ctrl+Alt+Y` | Translate **my** speech to English |
+| `Ctrl+Alt+P` | Polish mode (cleaner English, same meaning) |
+| `Ctrl+Alt+H` | Hebrew narration of what **they** say |
+| `Ctrl+Alt+E` | Explain hard terms |
+| `Ctrl+Alt+S` | Show / hide subtitles |
 
-```bash
-.venv\Scripts\python -m livetranslator --file samples\english_test.wav
+📖 **Full user guide (Hebrew):** [docs/GUIDE.he.md](docs/GUIDE.he.md) · 🏛️ **Design notes:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · 🗺️ **Roadmap:** [docs/ROADMAP.md](docs/ROADMAP.md)
+
+---
+
+## 📁 Project structure
+
+```
+livetranslator/
+├── app.py               orchestration, subtitle pipeline, file-based test modes
+├── speak.py             your mic → English voice → virtual mic (mixer, pass-through)
+├── narrate.py           Hebrew narration + per-app volume ducking (crash-safe)
+├── process_loopback.py  capture every app except this one (WASAPI, raw COM)
+├── cloud_asr.py         Groq Whisper with noise / hallucination filtering
+├── claude_translate.py  streamed, context-aware translation + output guard + polish mode
+├── explain.py           personalised term explanations
+├── engines.py           local Whisper / NLLB / Piper / Kokoro fallbacks
+├── net.py               kept-alive HTTPS, Windows trust store, content-filter detection
+├── guard.py             never leave the PC with a silent microphone
+├── hotkeys.py           Win32 RegisterHotKey
+├── vocabulary.py        personal terms → ASR hints + translation glossary
+└── ui.py / tray.py      RTL subtitle overlay and system-tray menu
+tools/                   end-to-end tests through the real audio devices, setup scripts
 ```
 
-```bash
-.venv\Scripts\python -m livetranslator --speak-file samples\hebrew_test.wav --out english_voice.wav
-```
+---
 
-## מגבלות ידועות
+<div align="center">
 
-- **הדיבור במצב מקומי איטי יחסית** (5–7 שניות). רוב הזמן הולך על זיהוי העברית. במצב ענן הוא מהיר יותר.
-- **מצב הענן (Azure) והתרגום עם Claude עוד לא נבדקו עם מפתח אמיתי.** נבדקו רק החיבור לשרת והחזרה לתרגום מקומי כשיש שגיאה.
-- **אין עדיין קריינות בעברית** לכיוון הכתוביות.
-- **במצב בדיקה בלי VB-CABLE**, הכתוביות קולטות גם את האנגלית שהתוכנה עצמה משמיעה.
-- **תרגום מקומי:** טוב למשפטים רגילים, פחות טוב בסלנג ובמונחים מקצועיים.
+Built by **[@chanafroind-sys](https://github.com/chanafroind-sys)** · AI-assisted development with Claude Code
 
-## מבנה
+<sub>Model licenses: Whisper (MIT) · NLLB-200 (CC-BY-NC 4.0) · Piper voices (per voice) · Kokoro-82M (Apache 2.0)</sub>
 
-ראו [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-## רישיונות של המודלים
-
-- Whisper (OpenAI, ‏MIT) דרך faster-whisper (‏MIT).
-- מודלי התרגום של Argos Translate (מבוססי OPUS-MT, ‏CC-BY 4.0).
-- Kokoro-82M (‏Apache 2.0).
-- Piper (‏GPL-3.0) והקולות שלו (לפי כל קול).
+</div>
