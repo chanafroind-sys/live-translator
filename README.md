@@ -20,18 +20,39 @@ It works in Zoom, Google Meet, Teams, the browser, or a recorded lecture, with *
 
 ---
 
+## 💡 The idea
+
+Most translation tools live **inside** one app: a Zoom add-on, a browser extension, a captioning service. I wanted the opposite: a translator that sits **between me and my computer's microphone and speakers**, so it works in *every* app at once, including the ones that don't let you install anything.
+
+From there, every feature came from asking *"what would make a real conversation feel natural?"*
+
+| # | Product decision | Why |
+|:-:|---|---|
+| 1 | **Live on the microphone and speakers, not inside an app** | One tool for Zoom, Meet, Teams, browser-based tools, recorded lessons and videos. Nothing to install in the app. |
+| 2 | **Two independent directions, each with its own switch** | Sometimes I only need to *understand* them, sometimes only to *be understood*. Each direction has its own hotkey (`Ctrl+Alt+Y`, `Ctrl+Alt+H`). |
+| 3 | **Original quiet, translation loud** | Hearing the real voice underneath keeps tone and timing; the translation on top carries the meaning. When I hear Hebrew narration, the other apps are turned down to 30%. |
+| 4 | **They hear only the translation** | While translating, my Hebrew is muted, so the other side hears one clean English voice and not two languages over each other. |
+| 5 | **Cloud *or* local, by situation** | The cloud is fast and accurate; local works with no internet, on a filtered network, or when privacy matters. The app chooses automatically and says when it switched. |
+| 6 | **Invisible until needed** | It lives in the system tray, not in a window that gets in the way. Subtitles appear only on demand, and nothing is transcribed while they're hidden. |
+| 7 | **Speed first** | In conversation, a late translation is a useless one. I chose the fast cloud stack (Groq for recognition, Claude Haiku for translation) and a fast natural voice, and the target became "about one second". |
+| 8 | **A natural female voice** | The other side should hear a person, not a robot. |
+| 9 | **My own vocabulary** | Israelis mix English tech words into Hebrew ("עשיתי דיפלוי לפרודקשן"). A personal terms file makes sure *my* words, names and companies come out right. |
+| 10 | **"Polish" mode on a hotkey** | When I want to sound my best, the same meaning comes out in cleaner, professional English, without false starts or "um". It never adds anything I didn't say. |
+| 11 | **Explanations of hard terms, after the translation** | If they use jargon I don't know, I get a short Hebrew explanation tailored to what *I* already know. It arrives *after* the translation, so it never delays what they actually said. |
+| 12 | **Documented and measured** | Every claim about speed is measured end to end, and the project is fully documented for whoever picks it up next. |
+
+---
+
 ## ✨ What it does
 
 | | Feature | How it feels |
 |---|---|---|
-| 🗣️ | **Speak Hebrew → they hear English** | A natural English voice goes into any call through a virtual microphone. Your own Hebrew is muted. |
-| 📝 | **They speak English → Hebrew subtitles** | An always-on-top subtitle window, plus optional **Hebrew narration**, with the call turned down to 30% underneath. |
-| ✍️ | **Polish mode** | Turns hesitant speech ("um… I worked on, on backend stuff…") into clean, professional English. It never adds facts. |
-| 💡 | **Term explanations** | After a line is translated, hard jargon gets a short Hebrew explanation, based on what *you* already know. |
-| 📚 | **Personal vocabulary** | Your names, companies and tech terms are recognized and translated exactly as you want. |
-| 🔒 | **Graceful by design** | Runs in the system tray. If the cloud is unreachable it works fully offline, and it never leaves you with a silent mic. |
-
-Every feature has its own global hotkey (`Ctrl+Alt+Y / P / H / E / S`) and a checkbox in the tray menu.
+| 🗣️ | **Speak Hebrew → they hear English** | A natural English voice goes into any call through a virtual microphone. |
+| 📝 | **They speak English → Hebrew subtitles** | An always-on-top subtitle window, plus optional **Hebrew narration** over a quieter call. |
+| ✍️ | **Polish mode** | *"אני בעצם, אממ, עבדתי שם על, על הרבה דברים של בקאנד"* → *"I actually worked on a lot of backend things there."* |
+| 💡 | **Term explanations** | *"…eventual consistency with an outbox pattern?"* → 💡 a short Hebrew explanation of each term. |
+| 📚 | **Personal vocabulary** | Names, companies and tech terms recognized and translated exactly as you want. |
+| 🔒 | **Works anywhere** | Falls back to fully offline processing, and always restores your real microphone when it closes. |
 
 ---
 
@@ -39,22 +60,22 @@ Every feature has its own global hotkey (`Ctrl+Alt+Y / P / H / E / S`) and a che
 
 Every number below was measured **end to end through the real virtual audio cable**. A test plays speech, records exactly what Zoom would receive, and transcribes it back ([`tools/e2e_speak_test.py`](tools/e2e_speak_test.py), [`tools/e2e_narrate_test.py`](tools/e2e_narrate_test.py)).
 
-| Stage of the project | Hebrew → English voice | English → Hebrew subtitle |
+| Version | Hebrew → English voice | English → Hebrew subtitle |
 |---|:---:|:---:|
-| v1: fully local (Whisper + NLLB, CPU only) | 11–17 s ⚠️ backlog grew | 1–2 s |
-| + Groq Whisper large-v3 + Claude Haiku | 1.4–2.9 s | 1.8–2.1 s |
-| **+ streaming, kept-alive connections, no JSON schema** | **1.2–2.0 s** | **1.1–1.5 s** |
+| v1: fully local, CPU only | 11–17 s | 1–2 s |
+| v2: cloud recognition and translation | 1.4–2.9 s | 1.8–2.1 s |
+| **v3: streaming + speed tuning** | **1.2–2.0 s** | **1.1–1.5 s** |
 
-**Where the last second went:**
+**What made v3 faster:**
 
-| Change | Saved |
+| Optimization | Saved |
 |---|---|
-| Plain-text output instead of a JSON schema (with a safe output guard) | **−0.55 s** per line |
-| SSE streaming: the voice starts on the **first clause**, not the full sentence | −0.3 s on long lines |
+| Plain-text model output instead of a structured JSON format | **−0.55 s** per line |
+| Streaming: the voice starts on the **first clause**, not the whole sentence | −0.3 s on long lines |
 | One kept-alive HTTPS connection per service | −0.1 to 0.3 s |
-| Whisper single-pass decoding (no temperature fallback) | worst case 23 s → 0.3 s |
+| Polish mode | ±0 s: same call, different instructions (0.77 s vs 0.84 s) |
 
-A real sample from the test, Hebrew mixed with English tech terms the way Israelis actually talk:
+A real sample from the test, Hebrew mixed with English tech terms:
 
 | Said (Hebrew) | The other side heard |
 |---|---|
@@ -69,44 +90,37 @@ A real sample from the test, Hebrew mixed with English tech terms the way Israel
 ```mermaid
 flowchart LR
     subgraph OUT["🗣️ You → them"]
-        MIC["Real microphone"] --> VAD1["Adaptive VAD<br/>(learns noise floor)"]
+        MIC["Real microphone"] --> VAD1["Voice activity<br/>detection"]
         VAD1 --> ASR1["Whisper large-v3<br/>Groq · ~0.3 s"]
         ASR1 --> LLM1["Claude Haiku<br/>streamed · per clause"]
-        LLM1 --> TTS1["Piper / Kokoro<br/>English voice"]
+        LLM1 --> TTS1["Natural English voice"]
         TTS1 --> MIX["Mixer"]
         MIC -. "pass-through when off" .-> MIX
-        MIX --> CABLE["VB-CABLE<br/>virtual mic"] --> APPS["Zoom · Meet · Teams"]
+        MIX --> CABLE["Virtual microphone"] --> APPS["Zoom · Meet · Teams"]
     end
 
     subgraph IN["👂 Them → you"]
-        PL["Process-loopback capture<br/>all apps <b>except itself</b>"] --> VAD2["VAD"]
+        PL["Capture all apps<br/>except this one"] --> VAD2["Voice activity detection"]
         VAD2 --> ASR2["Whisper large-v3"]
         ASR2 --> LLM2["Claude Haiku"]
         LLM2 --> SUB["Subtitle window"]
-        LLM2 --> NAR["Hebrew narration<br/>(other apps ducked)"]
+        LLM2 --> NAR["Hebrew narration<br/>(other apps quieter)"]
         LLM2 --> EXP["💡 Term explainer<br/>(separate, later call)"]
     end
 ```
 
-Each stage runs on its own thread with bounded queues. If recognition falls behind, queued phrases are merged into one pass so the delay can't snowball. Every cloud stage has a local fallback: **faster-whisper**, **NLLB-200** (CTranslate2, int8) and **Piper**.
+Every cloud stage has a local fallback: **faster-whisper**, **NLLB-200** (CTranslate2, int8) and **Piper**.
 
----
+### Under the hood
 
-## 🧠 Engineering highlights
+A few of the more interesting technical pieces:
 
-Real problems found on a real machine, and how they were solved:
+- **Hearing everything except itself:** so the app never re-translates its own Hebrew narration, it records the PC with Windows 11 *process loopback*, which captures all apps except its own process (raw WASAPI/COM from Python).
+- **Clause-level streaming:** the translation is streamed and spoken clause by clause, so the voice starts before the sentence is finished.
+- **Personalized explanations:** a separate model call, judged against a short "what I already know" profile, runs only after the translation is delivered.
+- **Locked-down Windows:** the machine's Smart App Control blocks unsigned native libraries, so the project includes a pure-Python SentencePiece tokenizer reader and calls the Claude API over raw HTTP/SSE.
 
-| Problem | Solution |
-|---|---|
-| **The app heard its own Hebrew narration** and translated it back ("שלום → Hello → שלום…") | Windows 11 **process-loopback** capture (`ActivateAudioInterfaceAsync`, exclude own process tree), implemented with raw COM in Python. Measured leakage: 0.0003, which is the noise floor. |
-| **Windows Smart App Control** blocked unsigned DLLs (`sentencepiece`, and `jiter` inside the Anthropic SDK) | Wrote a pure-Python **SentencePiece protobuf parser** that rebuilds the tokenizer with HF `tokenizers`, and called the Claude API over raw HTTP/SSE. No policy was bypassed. |
-| **Global hotkeys silently died** under CPU load (Windows drops slow low-level hooks) | Switched from a keyboard hook to Win32 `RegisterHotKey`. |
-| **The laptop mic is very quiet** (idle RMS 0.0003) and a fixed VAD threshold missed most speech | **Adaptive VAD** that tracks the room's noise floor, with hysteresis inside phrases. |
-| **The model "thought aloud"** into the live voice ("Wait, let me correct that…") | Per-clause **output guard**: first line only, meta-phrase detection, and English words that weren't spoken are rejected. |
-| **A network content filter** (Netspark) intercepted TLS and returned HTML block pages | Trust the Windows certificate store (`truststore`), detect block pages, notify the user once, fall back to local, retry every 5 minutes. |
-| **Native libraries failed on a Hebrew Windows username** (`C:\Users\פרוינד`) | Pass 8.3 short paths to espeak-ng, and feed Kokoro phonemes directly. |
-| **A crash could leave Windows with a silent mic** (default = virtual cable) | A **guard process** restores the real mic and app volumes however the app ends, plus a sign-in check. |
-| **Narration needs Zoom quieter, but never left quiet** | Per-app volume ducking with originals **persisted to disk before** lowering, restored on exit, crash or next start. |
+More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
@@ -148,16 +162,16 @@ git clone https://github.com/chanafroind-sys/live-translator.git
 livetranslator/
 ├── app.py               orchestration, subtitle pipeline, file-based test modes
 ├── speak.py             your mic → English voice → virtual mic (mixer, pass-through)
-├── narrate.py           Hebrew narration + per-app volume ducking (crash-safe)
+├── narrate.py           Hebrew narration + other apps turned down (restored on exit)
 ├── process_loopback.py  capture every app except this one (WASAPI, raw COM)
-├── cloud_asr.py         Groq Whisper with noise / hallucination filtering
-├── claude_translate.py  streamed, context-aware translation + output guard + polish mode
-├── explain.py           personalised term explanations
+├── cloud_asr.py         Groq Whisper with noise filtering
+├── claude_translate.py  streamed, context-aware translation + polish mode
+├── explain.py           personalized term explanations
 ├── engines.py           local Whisper / NLLB / Piper / Kokoro fallbacks
-├── net.py               kept-alive HTTPS, Windows trust store, content-filter detection
-├── guard.py             never leave the PC with a silent microphone
-├── hotkeys.py           Win32 RegisterHotKey
-├── vocabulary.py        personal terms → ASR hints + translation glossary
+├── net.py               kept-alive HTTPS, cloud → local switching
+├── guard.py             always restores the real microphone
+├── hotkeys.py           global hotkeys
+├── vocabulary.py        personal terms → recognition hints + translation glossary
 └── ui.py / tray.py      RTL subtitle overlay and system-tray menu
 tools/                   end-to-end tests through the real audio devices, setup scripts
 ```
@@ -166,7 +180,8 @@ tools/                   end-to-end tests through the real audio devices, setup 
 
 <div align="center">
 
-Built by **[@chanafroind-sys](https://github.com/chanafroind-sys)** · AI-assisted development with Claude Code
+**Product concept, features and direction:** [@chanafroind-sys](https://github.com/chanafroind-sys)<br>
+Implemented with AI-assisted development (Claude Code)
 
 <sub>Model licenses: Whisper (MIT) · NLLB-200 (CC-BY-NC 4.0) · Piper voices (per voice) · Kokoro-82M (Apache 2.0)</sub>
 
